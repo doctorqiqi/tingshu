@@ -763,12 +763,38 @@
             <input type="checkbox" id="autoScroll" checked style="width:20px;height:20px;accent-color:#fa2d48;" />
           </div>
         </div>
+        <div class="section-head">云端中文音色 · Edge TTS（GitHub 开源 Worker）</div>
+        <div class="setting-card">
+          <div class="setting-item" style="display:block;">
+            <label for="workerUrl" style="display:block;margin-bottom:7px;">Cloudflare Worker 地址</label>
+            <input id="workerUrl" type="url" placeholder="https://你的-worker.workers.dev" autocomplete="url" style="width:100%;" />
+          </div>
+          <div class="setting-item" style="display:block;">
+            <label for="workerToken" style="display:block;margin-bottom:7px;">Worker API Key</label>
+            <input id="workerToken" type="password" placeholder="填写 Cloudflare Secret：API_KEY" autocomplete="new-password" style="width:100%;" />
+          </div>
+          <div class="setting-item">
+            <span>开源中文音色</span>
+            <select id="cloudVoice">
+              <option value="zh-CN-XiaoxiaoNeural">晓晓 · 女声（普通话）</option>
+              <option value="zh-CN-XiaoyiNeural">晓伊 · 女声（普通话）</option>
+              <option value="zh-CN-YunxiNeural">云希 · 男声（普通话）</option>
+              <option value="zh-CN-YunyangNeural">云扬 · 男声（普通话）</option>
+              <option value="zh-CN-YunjianNeural">云健 · 男声（普通话）</option>
+              <option value="zh-CN-liaoning-XiaobeiNeural">晓北 · 女声（辽宁话）</option>
+            </select>
+          </div>
+          <div class="setting-item" style="display:block;">
+            <button class="chip active" id="saveAzureConfig" type="button">保存云端设置</button>
+            <p style="font-size:11px;line-height:1.6;color:var(--text3);margin:9px 0 0;">使用 GitHub 开源 Edge TTS Worker，调用微软 Edge 在线语音接口，不需要 Azure 密钥或自建模型。API Key 保存在浏览器本地；请勿分享。该接口非微软官方 SLA，可能限流或变更。</p>
+          </div>
+        </div>
         <div class="section-head">关于</div>
         <div class="setting-card">
           <div class="about-block">
             听书 · Apple Music 风格<br>
             支持 EPUB / TXT，可删除<br>
-            本地 Web Speech + 有道/百度云端<br>
+            本地 Web Speech + Edge TTS 云端<br>
             书架本地保存 · 可部署 GitHub Pages
           </div>
         </div>
@@ -883,6 +909,9 @@
     let selectedVoice = null;
     let cloudAudio = document.getElementById('cloudAudio');
     let cloudProvider = 0;
+    let cloudObjectUrl = null;
+    let meloConfig = { workerUrl: '', token: '', voice: 'ZH' };
+    let cloudRequestId = 0;
     let sleepMinutes = 0;
     let sleepDeadline = 0;
     let sleepTimerId = null;
@@ -1137,7 +1166,54 @@
     setTimeout(loadVoices, 300);
     setTimeout(loadVoices, 1000);
 
-    // Cloud TTS (China)
+    // Cloud TTS: self-hosted open-source MeloTTS through a Cloudflare Worker gateway.
+    function loadAzureConfig() {
+      try {
+        const saved = JSON.parse(localStorage.getItem('tingshu_edge_worker_tts') || '{}');
+        meloConfig = { ...meloConfig, ...saved };
+      } catch (e) {}
+      $('#workerUrl').value = meloConfig.workerUrl || '';
+      $('#workerToken').value = meloConfig.token || '';
+      $('#cloudVoice').value = meloConfig.voice || 'zh-CN-XiaoxiaoNeural';
+    }
+    function saveAzureConfig() {
+      meloConfig = {
+        workerUrl: $('#workerUrl').value.trim().replace(/\/$/, ''),
+        token: $('#workerToken').value.trim(),
+        voice: $('#cloudVoice').value || 'zh-CN-XiaoxiaoNeural'
+      };
+      try { localStorage.setItem('tingshu_edge_worker_tts', JSON.stringify(meloConfig)); }
+      catch (e) { toast('浏览器无法保存设置'); return; }
+      toast(meloConfig.workerUrl && meloConfig.token ? 'Edge TTS 云端设置已保存' : '已保存；填写 Worker 地址和 API Key 后启用');
+    }
+    loadAzureConfig();
+    $('#saveAzureConfig').addEventListener('click', saveAzureConfig);
+
+    async function synthesizeMelo(text) {
+      if (!meloConfig.workerUrl || !meloConfig.token) {
+        throw new Error('请先填写 Cloudflare Worker 地址和 API Key');
+      }
+      const res = await fetch(`${meloConfig.workerUrl}/v1/audio/speech`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${meloConfig.token}`
+        },
+        body: JSON.stringify({
+          model: 'tts-1',
+          input: text,
+          voice: meloConfig.voice || 'zh-CN-XiaoxiaoNeural',
+          speed: Math.min(2, Math.max(0.5, rate)),
+          response_format: 'mp3'
+        })
+      });
+      if (!res.ok) {
+        let detail = '';
+        try { detail = (await res.text()).slice(0, 240); } catch (e) {}
+        throw new Error(`Edge TTS 请求失败 (${res.status}) ${detail}`);
+      }
+      return await res.blob();
+    }
     function buildCloudUrls(text) {
       const q = encodeURIComponent(text.slice(0, 200));
       return [
@@ -1145,34 +1221,63 @@
         `https://fanyi.baidu.com/gettts?lan=zh&text=${q}&spd=5&source=web`
       ];
     }
-    function speakCloud(index, retry = 0) {
-      stopKeepAlive();
-      if (!sentences.length || index < 0 || index >= sentences.length) { stopAll(); return; }
-      currentIndex = index;
-      updateSubtitle();
-      updateProgress();
-      const urls = buildCloudUrls(sentences[index]);
-      const url = urls[(cloudProvider + retry) % urls.length];
-      const onFail = () => {
-        if (retry < urls.length - 1) { cloudProvider = (cloudProvider + 1) % urls.length; speakCloud(index, retry + 1); return; }
-        toast('云端不可用，已切本地');
-        currentEngine = 'local';
-        document.querySelectorAll('#engineGroup .chip').forEach(b => b.classList.toggle('active', b.dataset.engine === 'local'));
-        speakLocal(currentIndex);
-      };
+    function releaseCloudObjectUrl() {
+      if (cloudObjectUrl) { URL.revokeObjectURL(cloudObjectUrl); cloudObjectUrl = null; }
+    }
+    function playCloudUrl(url, index, onError = null) {
       cloudAudio.onended = () => {
+        releaseCloudObjectUrl();
         if (onSentenceEndCheckSleep()) return;
         if (isPlaying && currentIndex < sentences.length - 1) setTimeout(() => speakCloud(currentIndex + 1), 120);
         else { isPlaying = false; updatePlayUI(); }
       };
-      cloudAudio.onerror = onFail;
-      try {
-        cloudAudio.src = url;
-        cloudAudio.playbackRate = Math.min(Math.max(rate * 0.95, 0.75), 1.4);
-        cloudAudio.play().catch(onFail);
-        isPlaying = true;
-        updatePlayUI();
-      } catch (e) { onFail(); }
+      cloudAudio.onerror = onError || (() => fallbackDomestic(index));
+      cloudAudio.src = url;
+      cloudAudio.playbackRate = 1;
+      cloudAudio.play().catch(() => fallbackDomestic(index));
+      isPlaying = true;
+      updatePlayUI();
+    }
+    function fallbackDomestic(index) {
+      const urls = buildCloudUrls(sentences[index]);
+      const url = urls[cloudProvider % urls.length];
+      cloudProvider++;
+      const onError = () => {
+        if (cloudProvider < urls.length) fallbackDomestic(index);
+        else {
+          toast('云端服务不可用，已切换本地');
+          currentEngine = 'local';
+          document.querySelectorAll('#engineGroup .chip').forEach(b => b.classList.toggle('active', b.dataset.engine === 'local'));
+          speakLocal(index);
+        }
+      };
+      playCloudUrl(url, index, onError);
+    }
+    async function speakCloud(index) {
+      stopKeepAlive();
+      if (!sentences.length || index < 0 || index >= sentences.length) { stopAll(); return; }
+      currentIndex = index;
+      const requestId = ++cloudRequestId;
+      updateSubtitle();
+      updateProgress();
+      cloudAudio.pause();
+      releaseCloudObjectUrl();
+      cloudProvider = 0;
+      if (meloConfig.workerUrl && meloConfig.token) {
+        try {
+          const blob = await synthesizeMelo(sentences[index]);
+          // 用户在合成期间切换了段落/引擎时，丢弃过期结果。
+          if (requestId !== cloudRequestId || currentIndex !== index || currentEngine !== 'cloud') return;
+          cloudObjectUrl = URL.createObjectURL(blob);
+          playCloudUrl(cloudObjectUrl, index);
+          return;
+        } catch (err) {
+          if (requestId !== cloudRequestId) return;
+          console.warn('Edge TTS Worker:', err);
+          toast('Edge TTS 云端暂不可用，尝试备用服务');
+        }
+      }
+      if (requestId === cloudRequestId) fallbackDomestic(index);
     }
 
     function speakLocal(index) {
@@ -1223,8 +1328,10 @@
 
     function stopAll(reset = true) {
       stopKeepAlive();
+      cloudRequestId++;
       speechSynthesis.cancel();
       cloudAudio.pause();
+      releaseCloudObjectUrl();
       cloudAudio.removeAttribute('src');
       if (reset) isPlaying = false;
       updatePlayUI();
