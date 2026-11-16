@@ -1042,6 +1042,7 @@
     const CHAP_TITLE_RE = new RegExp(
       '^\\s*(?:' +
         '第\\s*' + CN_NUM + '\\s*(?:[章回卷集部篇幕]|节(?=$|[\\s:：、.．—\\-]))' +
+        '|卷\\s*' + CN_NUM + '(?=$|[\\s:：、.．—\\-])' +
         '|(?:chapter|CHAPTER|Chapter)\\s*(?:[0-9]+|[IVXLCivxlc]+)(?![A-Za-z])' +
         '|(?:序言|序章|序|前言|后记|引子|楔子|尾声|终章|结语)(?:$|[\\s:：、.．—\\-])' +
         '|番外' +
@@ -1051,7 +1052,7 @@
       const t = String(line || '').trim();
       return t.length > 0 && t.length <= 40 && !/[。；;，,]$/.test(t) && CHAP_TITLE_RE.test(t);
     }
-    const SKIP_LABEL_RE = /^(目\s*录|contents?|table of contents|封面|cover)$/i;
+    const SKIP_LABEL_RE = /^(封面|cover)$/i;
     const normLabel = s => String(s || '').replace(/\s+/g, '').toLowerCase();
 
     // 自动识别 UTF-8 / GBK(GB18030) 编码，避免中文 TXT 乱码导致目录识别失败
@@ -1197,7 +1198,7 @@
       }
 
       // ---- 1. 读取目录（保留 #锚点，同一文件内的多个章节不再互相覆盖）----
-      const pushToc = (list, dir, label, src) => {
+      const pushToc = (list, dir, label, src, depth = 0) => {
         if (!label || !src) return;
         const [p, f] = src.split('#');
         let frag = '';
@@ -1205,7 +1206,8 @@
         list.push({
           label: label.replace(/\s+/g, ' ').trim(),
           href: p ? normalizePath(dir, p) : '',
-          frag
+          frag,
+          depth
         });
       };
 
@@ -1214,11 +1216,17 @@
         const ncxDoc = parser.parseFromString(await zip.file(ncxHref).async('string'), 'application/xml');
         const ncxDir = ncxHref.includes('/') ? ncxHref.slice(0, ncxHref.lastIndexOf('/')) : '';
         const list = [];
-        ncxDoc.querySelectorAll('navPoint').forEach(np => {
-          pushToc(list, ncxDir,
-            np.querySelector('navLabel > text')?.textContent,
-            np.querySelector('content')?.getAttribute('src'));
-        });
+        const kids = (el, name) => Array.from(el.children).filter(c => c.localName === name);
+        const walkNav = (parent, depth) => {
+          for (const np of kids(parent, 'navPoint')) {
+            const label = kids(np, 'navLabel')[0]?.textContent;
+            const src = kids(np, 'content')[0]?.getAttribute('src');
+            pushToc(list, ncxDir, label, src, depth);
+            walkNav(np, depth + 1);
+          }
+        };
+        const navMap = ncxDoc.querySelector('navMap');
+        if (navMap) walkNav(navMap, 0);
         tocLists.push(list);
       }
       if (navHref && zip.file(navHref)) {
@@ -1228,11 +1236,24 @@
         // 只取 epub:type="toc"，避免把 landmarks / page-list 当目录
         const tocNav = navs.find(n => Array.from(n.attributes).some(a => /type$/.test(a.name) && /\btoc\b/.test(a.value))) || navs[0];
         const list = [];
-        tocNav?.querySelectorAll('a[href]').forEach(a => pushToc(list, navDir, a.textContent, a.getAttribute('href')));
+        const walkOl = (ol, depth) => {
+          for (const li of Array.from(ol.children).filter(c => c.localName === 'li')) {
+            const a = Array.from(li.children).find(c => c.localName === 'a' && c.getAttribute('href'));
+            if (a) pushToc(list, navDir, a.textContent, a.getAttribute('href'), depth);
+            for (const sub of Array.from(li.children).filter(c => c.localName === 'ol')) walkOl(sub, depth + 1);
+          }
+        };
+        const rootOl = tocNav && Array.from(tocNav.children).find(c => c.localName === 'ol');
+        if (rootOl) walkOl(rootOl, 0);
+        else tocNav?.querySelectorAll('a[href]').forEach(a => pushToc(list, navDir, a.textContent, a.getAttribute('href'), 0));
         tocLists.push(list);
       }
 
       // ---- 2. 按 spine 顺序拆成段落块 ----
+      const tocHrefSet = new Set();
+      tocLists.forEach(l => l.forEach(t => tocHrefSet.add(t.href)));
+      const guideTocRef = opfDoc.querySelector('guide > reference[type="toc"]');
+      const guideTocHref = guideTocRef ? normalizePath(opfDir, guideTocRef.getAttribute('href') || '') : '';
       const files = [];
       const fileMap = {};
       for (const ref of Array.from(opfDoc.querySelectorAll('spine > itemref'))) {
@@ -1240,6 +1261,7 @@
         if (!item || (!item.media.includes('html') && !item.media.includes('xml'))) continue;
         const zipEntry = zip.file(item.href);
         if (!zipEntry || fileMap[item.href]) continue;
+        if (guideTocHref && item.href === guideTocHref && !tocHrefSet.has(item.href)) continue;
         const doc = parseMarkup(await zipEntry.async('string'));
         const root = doc.body || doc.documentElement;
         const blocks = [];
@@ -1266,19 +1288,22 @@
           const start = fileStart[t.href];
           let pos = start;
           if (t.frag) {
+            let found = -1;
             for (let i = start; i < start + f.blocks.length; i++) {
-              if (allBlocks[i].ids.has(t.frag)) { pos = i; break; }
+              if (allBlocks[i].ids.has(t.frag)) { found = i; break; }
             }
+            if (found < 0) {
+              const nl = normLabel(t.label);
+              for (let i = start; i < start + f.blocks.length; i++) {
+                if (allBlocks[i].text && normLabel(allBlocks[i].text) === nl) { found = i; break; }
+              }
+            }
+            if (found >= 0) pos = found;
           }
-          entries.push({ label: t.label, pos });
+          entries.push({ label: t.label, pos, depth: t.depth || 0 });
         }
         entries.sort((a, b) => a.pos - b.pos);
-        const dedup = [];
-        for (const e of entries) {
-          if (dedup.length && dedup[dedup.length - 1].pos === e.pos) dedup[dedup.length - 1] = e;
-          else dedup.push(e);
-        }
-        return dedup;
+        return entries;
       };
 
       let entries = [];
@@ -1288,9 +1313,42 @@
         if (r.length > entries.length) entries = r;
       }
 
+      // ---- 选定“章”所在的层级（仿微信读书：目录里的一级项 = 章，小节不拆章）----
+      // 若某一层大量出现“第X章/Chapter N”，以该层为章（卷 > 章 的书会落在第二层）；否则取最顶层
+      let chapDepth = 0;
+      if (entries.length) {
+        const CH_RE = /^\s*(第\s*[零〇一二三四五六七八九十百千万两0-9０-９]+\s*[章回]|chapter\s*[0-9IVXLC]+)/i;
+        const cnt = {};
+        let minDepth = Infinity;
+        for (const e of entries) {
+          minDepth = Math.min(minDepth, e.depth);
+          if (CH_RE.test(e.label)) cnt[e.depth] = (cnt[e.depth] || 0) + 1;
+        }
+        chapDepth = minDepth;
+        let bestCnt = 1;
+        for (const d of Object.keys(cnt).map(Number).sort((a, b) => a - b)) {
+          if (cnt[d] > bestCnt) { bestCnt = cnt[d]; chapDepth = d; }
+        }
+        // 只保留章及更高层级（卷）；同一位置的父级折叠为“所属卷”
+        const kept = entries.filter(e => e.depth <= chapDepth);
+        const dedup = [];
+        for (const e of kept) {
+          const prev = dedup[dedup.length - 1];
+          if (prev && prev.pos === e.pos) {
+            if (prev.depth < e.depth) e.group = prev.group || prev.label;
+            dedup[dedup.length - 1] = e;
+          } else dedup.push(e);
+        }
+        entries = dedup;
+      }
+
       const buildContent = (label, from, to) => {
         const texts = [];
-        for (let i = from; i < to; i++) if (allBlocks[i].text) texts.push(allBlocks[i].text);
+        const bt = normLabel(bookTitle);
+        for (let i = from; i < to; i++) {
+          const t = allBlocks[i].text;
+          if (t && normLabel(t) !== bt) texts.push(t);
+        }
         // 去掉正文开头与章节标题重复的标题行（含被拆成两行的情况）
         if (texts.length && normLabel(texts[0]) === normLabel(label)) texts.shift();
         else if (texts.length > 1 && normLabel(texts[0] + texts[1]) === normLabel(label)) texts.splice(0, 2);
@@ -1302,16 +1360,23 @@
       if (entries.length >= 2) {
         // 目录为准：每个目录项 = 一章；目录外的文件并入前一章
         if (entries[0].pos > 0) {
-          const firstText = allBlocks.slice(0, entries[0].pos).find(b => b.text)?.text || '';
-          const label = firstText && firstText.length <= 20 ? firstText : '书前内容';
+          const label = '书前内容';
           const content = buildContent(label, 0, entries[0].pos);
           if (content.length >= 300) chapters.push({ title: label, content });
         }
+        const groups = [];
         entries.forEach((e, i) => {
+          groups.length = e.depth + 1;
+          groups[e.depth] = e.label;
           if (SKIP_LABEL_RE.test(e.label)) return;
           const end = i + 1 < entries.length ? entries[i + 1].pos : allBlocks.length;
           const content = buildContent(e.label, e.pos, end);
-          if (content.length > 20) chapters.push({ title: e.label, content });
+          if (content.length > 20) {
+            const ch = { title: e.label, content, level: Math.min(e.depth, 3) };
+            const g = e.group || (e.depth > 0 ? groups[e.depth - 1] : '');
+            if (g) ch.group = g;
+            chapters.push(ch);
+          }
         });
       } else {
         // 没有可用目录：按文件 + 标题启发式识别，无标题的文件并入上一章
@@ -1816,9 +1881,9 @@
           const row = document.createElement('div');
           row.className = 'list-row' + (idx === currentChapIdx ? ' active' : '');
           row.innerHTML = `
-            <div>
+            <div style="padding-left:${(c.level || 0) * 14}px">
               <div class="list-row-title">${c.title}</div>
-              <div class="list-row-sub">约 ${c.content.length} 字</div>
+              <div class="list-row-sub">${c.group ? c.group + ' · ' : ''}约 ${c.content.length} 字</div>
             </div>
             <span style="font-size:12px;color:var(--text3)">${idx === currentChapIdx ? '当前' : ''}</span>
           `;
