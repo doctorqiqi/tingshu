@@ -5,28 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#0a0a0f" />
-  <title>听书 · 液态玻璃版</title>
+  <meta name="theme-color" content="#000000" />
+  <title>听书</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
     :root {
-      --bg: #07070c;
-      --glass: rgba(255, 255, 255, 0.06);
-      --glass-strong: rgba(255, 255, 255, 0.10);
-      --glass-border: rgba(255, 255, 255, 0.14);
-      --glass-highlight: rgba(255, 255, 255, 0.22);
-      --text: #f5f5f7;
-      --text2: rgba(235, 235, 245, 0.62);
-      --text3: rgba(235, 235, 245, 0.38);
-      --accent: #bf5af2;
-      --accent2: #ac8dff;
-      --accent3: #64d2ff;
-      --success: #30d158;
-      --radius: 22px;
-      --radius-sm: 16px;
+      --bg: #000000;
+      --surface: #1c1c1e;
+      --surface2: #2c2c2e;
+      --text: #ffffff;
+      --text2: rgba(235, 235, 245, 0.6);
+      --text3: rgba(235, 235, 245, 0.3);
+      --accent: #fa2d48;
+      --accent-soft: rgba(250, 45, 72, 0.15);
+      --blue: #0a84ff;
       --safe-top: env(safe-area-inset-top, 0px);
       --safe-bottom: env(safe-area-inset-bottom, 0px);
       --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+      --tab-h: 52px;
+      --mini-h: 64px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -35,466 +32,410 @@
       font-family: var(--font);
       background: var(--bg);
       color: var(--text);
-      line-height: 1.5;
       overflow: hidden;
       -webkit-font-smoothing: antialiased;
       user-select: none;
     }
 
-    /* Ambient mesh background */
-    .bg-mesh {
+    .app {
+      height: 100%;
+      max-width: 430px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      padding-top: var(--safe-top);
+    }
+
+    /* ===== Ambient blur bg (Apple Music style) ===== */
+    .ambient {
       position: fixed;
       inset: 0;
       z-index: 0;
-      background:
-        radial-gradient(ellipse 100% 80% at 10% -20%, rgba(191, 90, 242, 0.28), transparent 50%),
-        radial-gradient(ellipse 80% 60% at 95% 10%, rgba(100, 210, 255, 0.18), transparent 45%),
-        radial-gradient(ellipse 70% 50% at 50% 110%, rgba(172, 141, 255, 0.15), transparent 50%),
-        radial-gradient(ellipse 50% 40% at 80% 80%, rgba(48, 209, 88, 0.06), transparent 40%);
-      animation: meshShift 18s ease-in-out infinite alternate;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.8s ease;
     }
-    @keyframes meshShift {
-      0% { filter: hue-rotate(0deg) saturate(1); }
-      100% { filter: hue-rotate(25deg) saturate(1.15); }
+    .ambient.on { opacity: 1; }
+    .ambient-blur {
+      position: absolute;
+      inset: -20%;
+      background: var(--amb1, #3a1c71);
+      filter: blur(80px) saturate(1.4);
+      opacity: 0.55;
+      transform: scale(1.2);
+    }
+    .ambient-blur.b2 {
+      background: var(--amb2, #d76d77);
+      opacity: 0.35;
+      top: 40%;
+      left: 20%;
+    }
+    .ambient-dim {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.85) 55%, #000 100%);
     }
 
-    .app {
+    /* ===== Header ===== */
+    .top-bar {
       position: relative;
-      z-index: 1;
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      max-width: 430px; /* iPhone 14 Pro Max logical width */
-      margin: 0 auto;
-      padding-top: var(--safe-top);
-      padding-bottom: var(--safe-bottom);
-    }
-
-    /* ===== Liquid Glass utilities ===== */
-    .glass {
-      background: var(--glass);
-      backdrop-filter: blur(40px) saturate(180%);
-      -webkit-backdrop-filter: blur(40px) saturate(180%);
-      border: 1px solid var(--glass-border);
-      box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.35),
-        inset 0 1px 0 var(--glass-highlight);
-    }
-    .glass-strong {
-      background: var(--glass-strong);
-      backdrop-filter: blur(48px) saturate(200%);
-      -webkit-backdrop-filter: blur(48px) saturate(200%);
-      border: 1px solid var(--glass-border);
-      box-shadow:
-        0 12px 40px rgba(0, 0, 0, 0.4),
-        inset 0 1px 0 var(--glass-highlight);
-    }
-
-    /* Header */
-    header {
-      padding: 12px 20px 6px;
+      z-index: 10;
+      padding: 8px 20px 4px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-shrink: 0;
     }
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    .top-title {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
     }
-    .logo-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 12px;
-      background: linear-gradient(145deg, rgba(191, 90, 242, 0.9), rgba(100, 210, 255, 0.7));
+    .top-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255,255,255,0.1);
+      color: var(--text);
+      font-size: 16px;
+      cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
-      box-shadow: 0 4px 20px rgba(191, 90, 242, 0.4);
-    }
-    .logo-text {
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      background: linear-gradient(135deg, #fff 30%, #d4bfff);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    .badge {
-      font-size: 11px;
-      font-weight: 600;
-      padding: 5px 12px;
-      border-radius: 20px;
-      background: rgba(191, 90, 242, 0.18);
-      color: #e0c3ff;
-      border: 1px solid rgba(191, 90, 242, 0.3);
     }
 
-    /* Tabs - liquid pill */
-    .tabs-wrap {
-      padding: 8px 16px 12px;
-      flex-shrink: 0;
-    }
-    .tabs {
-      display: flex;
-      gap: 4px;
-      padding: 4px;
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(20px);
-    }
-    .tab {
-      flex: 1;
-      text-align: center;
-      padding: 11px 0;
-      border-radius: 12px;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text2);
-      background: transparent;
-      border: none;
-      cursor: pointer;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      font-family: inherit;
-    }
-    .tab.active {
-      background: rgba(255, 255, 255, 0.12);
-      color: var(--text);
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    }
-
-    /* Main scroll */
+    /* ===== Main scroll ===== */
     main {
       flex: 1;
       overflow-y: auto;
       overflow-x: hidden;
-      padding: 0 16px;
-      padding-bottom: calc(100px + var(--safe-bottom));
+      position: relative;
+      z-index: 5;
+      padding: 0 20px;
+      padding-bottom: calc(var(--tab-h) + var(--mini-h) + var(--safe-bottom) + 16px);
       -webkit-overflow-scrolling: touch;
     }
 
-    .section-label {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text3);
-      letter-spacing: 0.6px;
-      text-transform: uppercase;
-      margin: 16px 4px 10px;
+    .view { display: none; }
+    .view.active { display: block; }
+    .view.player-view.active {
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
     }
 
-    /* Upload - liquid glass card */
-    .upload-card {
-      border-radius: var(--radius);
-      padding: 28px 20px;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.3s;
-      position: relative;
-      overflow: hidden;
-    }
-    .upload-card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(191, 90, 242, 0.08), rgba(100, 210, 255, 0.05));
-      pointer-events: none;
-    }
-    .upload-card:active { transform: scale(0.98); }
-    .upload-icon {
-      font-size: 40px;
-      margin-bottom: 10px;
-      filter: drop-shadow(0 4px 12px rgba(191, 90, 242, 0.3));
-    }
-    .upload-card p {
-      font-size: 15px;
-      color: var(--text2);
-      position: relative;
-    }
-    .upload-card strong { color: #e0c3ff; }
-    .format-row {
+    /* ===== Library ===== */
+    .upload-pill {
       display: flex;
-      justify-content: center;
-      gap: 8px;
-      margin-top: 14px;
-      position: relative;
-    }
-    .format-chip {
-      font-size: 11px;
-      font-weight: 600;
-      padding: 4px 12px;
-      border-radius: 20px;
-      background: rgba(255, 255, 255, 0.08);
-      color: var(--text2);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    /* Book cards */
-    .book-list { display: flex; flex-direction: column; gap: 10px; }
-    .book-card {
-      display: flex;
-      gap: 14px;
       align-items: center;
-      padding: 12px 14px;
-      border-radius: var(--radius-sm);
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: var(--surface);
+      margin-bottom: 24px;
       cursor: pointer;
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      overflow: hidden;
+      transition: background 0.2s;
     }
-    .book-card:active { transform: scale(0.98); }
-    .book-card.active {
-      background: rgba(191, 90, 242, 0.12);
-      border-color: rgba(191, 90, 242, 0.35);
-    }
-    .book-cover {
-      width: 54px;
-      height: 74px;
+    .upload-pill:active { background: var(--surface2); }
+    .upload-icon {
+      width: 44px;
+      height: 44px;
       border-radius: 10px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .upload-text strong { display: block; font-size: 15px; font-weight: 600; }
+    .upload-text span { font-size: 13px; color: var(--text2); }
+
+    .section-head {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin-bottom: 14px;
+    }
+
+    .book-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 0;
+      cursor: pointer;
+      position: relative;
+      border-radius: 12px;
+      transition: background 0.15s;
+    }
+    .book-row:active { background: rgba(255,255,255,0.04); }
+    .book-row + .book-row { border-top: 0.5px solid rgba(255,255,255,0.08); }
+
+    .cover-sm {
+      width: 52px;
+      height: 52px;
+      border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 24px;
       flex-shrink: 0;
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
-      position: relative;
-      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
     }
-    .book-cover::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(to top, rgba(0,0,0,0.3), transparent 50%);
-    }
-    .book-info { flex: 1; min-width: 0; }
-    .book-title {
-      font-size: 15px;
-      font-weight: 650;
+    .book-meta { flex: 1; min-width: 0; }
+    .book-name {
+      font-size: 16px;
+      font-weight: 500;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      letter-spacing: -0.2px;
     }
-    .book-meta {
-      font-size: 12px;
+    .book-sub {
+      font-size: 13px;
       color: var(--text2);
       margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .book-progress {
-      height: 3px;
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 2px;
+    .book-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: transparent;
+      color: var(--text2);
+      font-size: 18px;
+      cursor: pointer;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon-btn:active { background: rgba(255,255,255,0.08); }
+    .icon-btn.danger { color: var(--accent); }
+
+    .progress-line {
+      height: 2px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 1px;
       margin-top: 8px;
       overflow: hidden;
     }
-    .book-progress-bar {
+    .progress-line > div {
       height: 100%;
-      background: linear-gradient(90deg, var(--accent), var(--accent3));
-      border-radius: 2px;
+      background: var(--accent);
       width: 0%;
-      transition: width 0.4s ease;
-    }
-    .book-type {
-      position: absolute;
-      top: 10px;
-      right: 12px;
-      font-size: 10px;
-      font-weight: 700;
-      padding: 2px 7px;
-      border-radius: 6px;
-      background: rgba(0, 0, 0, 0.35);
-      color: var(--text2);
-      backdrop-filter: blur(8px);
+      border-radius: 1px;
     }
 
-    /* ===== Player ===== */
-    .player-view { display: none; flex-direction: column; min-height: 100%; }
-    .player-view.active { display: flex; }
+    /* ===== Player (Apple Music Now Playing) ===== */
+    .now-playing {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding-top: 8px;
+    }
 
-    .player-hero {
-      text-align: center;
-      padding: 8px 0 4px;
-    }
-    .cover-stage {
-      position: relative;
-      width: 200px;
-      height: 260px;
-      margin: 0 auto 18px;
-    }
-    .cover-glow {
-      position: absolute;
-      inset: -30px;
-      background: radial-gradient(circle, rgba(191, 90, 242, 0.35), transparent 65%);
-      filter: blur(20px);
-      z-index: 0;
-      opacity: 0.7;
-      transition: opacity 0.5s;
-    }
-    .cover-glow.playing { opacity: 1; animation: glowPulse 3s ease-in-out infinite; }
-    @keyframes glowPulse {
-      0%, 100% { transform: scale(1); opacity: 0.7; }
-      50% { transform: scale(1.08); opacity: 1; }
-    }
-    .player-cover {
-      position: relative;
-      z-index: 1;
-      width: 100%;
-      height: 100%;
-      border-radius: 20px;
+    .artwork-wrap {
+      flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 72px;
+      padding: 12px 24px 20px;
+      min-height: 220px;
+    }
+    .artwork {
+      width: min(100%, 300px);
+      aspect-ratio: 1;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 80px;
       box-shadow:
-        0 20px 50px rgba(0, 0, 0, 0.5),
-        0 0 0 1px rgba(255, 255, 255, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-      transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        0 20px 60px rgba(0,0,0,0.5),
+        0 0 0 0.5px rgba(255,255,255,0.1);
+      transition: transform 0.4s cubic-bezier(0.25, 0.1, 0.25, 1), box-shadow 0.4s;
+      position: relative;
       overflow: hidden;
     }
-    .player-cover.playing { animation: coverFloat 4s ease-in-out infinite; }
-    @keyframes coverFloat {
-      0%, 100% { transform: translateY(0) scale(1); }
-      50% { transform: translateY(-6px) scale(1.02); }
+    .artwork.playing {
+      transform: scale(1.02);
+      box-shadow:
+        0 28px 80px rgba(0,0,0,0.55),
+        0 0 0 0.5px rgba(255,255,255,0.12);
     }
-    .player-cover::after {
+    .artwork::after {
       content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 40%);
-    }
-    .player-title {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: -0.3px;
-      padding: 0 12px;
-      margin-bottom: 4px;
-    }
-    .player-author {
-      font-size: 14px;
-      color: var(--text2);
-    }
-
-    /* Subtitle glass */
-    .subtitle-box {
-      border-radius: var(--radius-sm);
-      padding: 14px 16px;
-      margin: 16px 0 10px;
-      max-height: 130px;
-      overflow-y: auto;
-      font-size: 15px;
-      line-height: 1.7;
-      scroll-behavior: smooth;
-    }
-    .subtitle-box .current {
-      background: linear-gradient(90deg, rgba(191, 90, 242, 0.35), rgba(100, 210, 255, 0.2));
-      border-radius: 5px;
-      padding: 1px 4px;
-      box-decoration-break: clone;
-      -webkit-box-decoration-break: clone;
-    }
-
-    /* Controls */
-    .controls { margin-top: auto; padding: 6px 0 12px; }
-
-    .progress-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 18px;
-    }
-    .time {
-      font-size: 12px;
-      font-weight: 500;
-      color: var(--text2);
-      min-width: 36px;
-      font-variant-numeric: tabular-nums;
-    }
-    .progress-track {
-      flex: 1;
-      height: 5px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 3px;
-      cursor: pointer;
-      position: relative;
-    }
-    .progress-fill {
-      height: 100%;
-      width: 0%;
-      border-radius: 3px;
-      background: linear-gradient(90deg, var(--accent), var(--accent3));
-      position: relative;
+      background: linear-gradient(to top, rgba(0,0,0,0.15), transparent 40%);
       pointer-events: none;
     }
-    .progress-fill::after {
-      content: "";
-      position: absolute;
-      right: -6px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: #fff;
-      box-shadow: 0 0 10px rgba(191, 90, 242, 0.5);
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-    .progress-track:active .progress-fill::after { opacity: 1; }
 
-    .main-ctrls {
+    .track-info {
+      text-align: center;
+      padding: 0 8px 16px;
+    }
+    .track-title {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .track-artist {
+      font-size: 16px;
+      color: var(--accent);
+      font-weight: 400;
+    }
+
+    /* Lyrics / subtitle */
+    .lyrics {
+      margin: 0 0 16px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.06);
+      max-height: 88px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.65;
+      color: var(--text2);
+      text-align: center;
+    }
+    .lyrics .cur {
+      color: var(--text);
+      font-weight: 600;
+      background: rgba(250, 45, 72, 0.2);
+      border-radius: 4px;
+      padding: 0 3px;
+    }
+
+    /* Scrubber */
+    .scrubber {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .time-label {
+      font-size: 11px;
+      color: var(--text3);
+      font-variant-numeric: tabular-nums;
+      min-width: 32px;
+    }
+    .time-label.end { text-align: right; }
+    .scrub-track {
+      flex: 1;
+      height: 4px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 2px;
+      cursor: pointer;
+      position: relative;
+    }
+    .scrub-fill {
+      height: 100%;
+      width: 0%;
+      background: rgba(255,255,255,0.85);
+      border-radius: 2px;
+      pointer-events: none;
+    }
+
+    /* Transport controls */
+    .transport {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 28px;
-      margin-bottom: 18px;
+      gap: 36px;
+      padding: 12px 0 8px;
     }
-    .ctrl {
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
+    .t-btn {
+      width: 44px;
+      height: 44px;
       border: none;
-      background: rgba(255, 255, 255, 0.08);
+      background: transparent;
       color: var(--text);
-      font-size: 18px;
+      font-size: 22px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.2s;
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      font-family: inherit;
+      border-radius: 50%;
     }
-    .ctrl:active { transform: scale(0.92); }
-    .ctrl.play {
-      width: 70px;
-      height: 70px;
+    .t-btn:active { opacity: 0.5; }
+    .t-btn.play {
+      width: 64px;
+      height: 64px;
       font-size: 28px;
-      background: linear-gradient(145deg, rgba(191, 90, 242, 0.9), rgba(100, 210, 255, 0.75));
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      box-shadow: 0 8px 28px rgba(191, 90, 242, 0.4);
+      background: var(--text);
+      color: #000;
     }
+    .t-btn.play:active { transform: scale(0.94); opacity: 1; }
 
-    .sec-ctrls {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+    /* Extra controls row */
+    .extra-row {
+      display: flex;
       gap: 10px;
+      margin-top: 8px;
+      flex-wrap: wrap;
     }
-    .ctrl-group {
-      border-radius: var(--radius-sm);
+    .chip {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 8px;
+      border-radius: 10px;
+      border: none;
+      background: rgba(255,255,255,0.08);
+      color: var(--text2);
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .chip.active {
+      background: var(--accent);
+      color: #fff;
+    }
+    .chip-group {
+      width: 100%;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .chip-group .chip { flex: 1; min-width: 48px; }
+
+    .select-row {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      margin-top: 4px;
+    }
+    .select-box {
+      flex: 1;
       padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.08);
     }
-    .ctrl-group label {
+    .select-box label {
       display: block;
       font-size: 11px;
-      font-weight: 600;
       color: var(--text3);
       margin-bottom: 4px;
+      font-weight: 500;
     }
-    .ctrl-group select {
+    .select-box select {
       width: 100%;
       background: transparent;
       border: none;
@@ -502,15 +443,13 @@
       font-size: 13px;
       font-family: inherit;
       outline: none;
-      cursor: pointer;
     }
-    .ctrl-group select option { background: #1c1c1e; }
-
+    .select-box select option { background: #1c1c1e; }
     input[type="range"] {
       width: 100%;
       -webkit-appearance: none;
-      height: 4px;
-      background: rgba(255, 255, 255, 0.12);
+      height: 3px;
+      background: rgba(255,255,255,0.15);
       border-radius: 2px;
       margin-top: 6px;
     }
@@ -520,138 +459,173 @@
       height: 16px;
       border-radius: 50%;
       background: #fff;
-      box-shadow: 0 0 8px rgba(191, 90, 242, 0.5);
       cursor: pointer;
     }
 
-    .engine-row {
-      grid-column: 1 / -1;
-      display: flex;
-      padding: 4px;
+    /* ===== Settings ===== */
+    .setting-card {
+      background: var(--surface);
       border-radius: 14px;
-      gap: 4px;
+      overflow: hidden;
+      margin-bottom: 20px;
     }
-    .engine-btn {
-      flex: 1;
-      padding: 10px;
-      border: none;
-      border-radius: 11px;
-      background: transparent;
-      color: var(--text2);
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.25s;
-      font-family: inherit;
-    }
-    .engine-btn.active {
-      background: linear-gradient(135deg, rgba(191, 90, 242, 0.85), rgba(100, 210, 255, 0.65));
-      color: #fff;
-      box-shadow: 0 4px 16px rgba(191, 90, 242, 0.3);
-    }
-
-    /* Settings */
-    .settings-view { display: none; }
-    .settings-view.active { display: block; }
-    .setting-row {
+    .setting-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 14px 16px;
-      border-radius: var(--radius-sm);
-      margin-bottom: 8px;
+      font-size: 16px;
     }
-    .setting-row label { font-size: 15px; font-weight: 500; }
-    .setting-row select {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      padding: 6px 10px;
-      color: var(--text);
-      font-size: 13px;
+    .setting-item + .setting-item {
+      border-top: 0.5px solid rgba(255,255,255,0.08);
+    }
+    .setting-item select {
+      background: transparent;
+      border: none;
+      color: var(--text2);
+      font-size: 15px;
       font-family: inherit;
+      text-align: right;
+      outline: none;
+    }
+    .setting-item select option { background: #1c1c1e; }
+    .about-block {
+      padding: 16px;
+      font-size: 13px;
+      color: var(--text2);
+      line-height: 1.7;
     }
 
-    /* Mini player - liquid glass dock */
-    .dock {
+    /* ===== Mini player (Apple Music style) ===== */
+    .mini {
       position: fixed;
-      bottom: 0;
       left: 50%;
       transform: translateX(-50%);
-      width: 100%;
-      max-width: 430px;
-      padding: 10px 16px calc(10px + var(--safe-bottom));
-      z-index: 50;
+      bottom: calc(var(--tab-h) + var(--safe-bottom));
+      width: calc(100% - 16px);
+      max-width: 414px;
+      z-index: 40;
       display: none;
+      border-radius: 14px;
+      background: rgba(40, 40, 42, 0.92);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      overflow: hidden;
     }
-    .dock-inner {
+    .mini.show { display: block; }
+    .mini-inner {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 10px 12px;
-      border-radius: 18px;
+      padding: 8px 12px;
     }
-    .dock-cover {
-      width: 40px;
-      height: 52px;
-      border-radius: 8px;
+    .mini-art {
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
+      font-size: 20px;
       flex-shrink: 0;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
-    .dock-info { flex: 1; min-width: 0; }
-    .dock-title {
+    .mini-info { flex: 1; min-width: 0; }
+    .mini-title {
       font-size: 14px;
-      font-weight: 650;
+      font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .dock-state { font-size: 12px; color: var(--text2); margin-top: 1px; }
-    .dock-play {
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      border: none;
-      background: linear-gradient(145deg, rgba(191, 90, 242, 0.9), rgba(100, 210, 255, 0.7));
-      color: #fff;
-      font-size: 16px;
-      cursor: pointer;
-      box-shadow: 0 4px 16px rgba(191, 90, 242, 0.35);
-      font-family: inherit;
+    .mini-sub {
+      font-size: 12px;
+      color: var(--text2);
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
+    .mini-play {
+      width: 40px;
+      height: 40px;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    /* ===== Bottom Tab Bar ===== */
+    .tabbar {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 0;
+      width: 100%;
+      max-width: 430px;
+      z-index: 50;
+      padding-bottom: var(--safe-bottom);
+      background: rgba(20, 20, 20, 0.88);
+      backdrop-filter: blur(30px) saturate(180%);
+      -webkit-backdrop-filter: blur(30px) saturate(180%);
+      border-top: 0.5px solid rgba(255,255,255,0.1);
+    }
+    .tabbar-inner {
+      display: flex;
+      height: var(--tab-h);
+    }
+    .tab {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      border: none;
+      background: transparent;
+      color: var(--text3);
+      font-size: 10px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      padding-top: 4px;
+    }
+    .tab .tab-icon { font-size: 22px; line-height: 1; }
+    .tab.active { color: var(--accent); }
 
     /* Toast */
     .toast {
       position: fixed;
-      top: calc(60px + var(--safe-top));
+      top: calc(50% - 20px);
       left: 50%;
-      transform: translateX(-50%) translateY(-12px);
-      padding: 12px 20px;
-      border-radius: 30px;
-      font-size: 13px;
-      font-weight: 600;
+      transform: translate(-50%, -50%) scale(0.9);
+      background: rgba(50, 50, 52, 0.94);
+      backdrop-filter: blur(20px);
+      color: #fff;
+      padding: 14px 22px;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 500;
       opacity: 0;
-      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-      z-index: 100;
+      transition: all 0.25s ease;
+      z-index: 200;
       pointer-events: none;
-      max-width: 90%;
+      max-width: 80%;
       text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
     }
     .toast.show {
       opacity: 1;
-      transform: translateX(-50%) translateY(0);
+      transform: translate(-50%, -50%) scale(1);
     }
 
-    /* Loading */
     .loading {
       position: fixed;
       inset: 0;
-      background: rgba(7, 7, 12, 0.7);
-      backdrop-filter: blur(12px);
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -659,185 +633,189 @@
       z-index: 200;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.3s;
+      transition: opacity 0.25s;
     }
     .loading.show { opacity: 1; pointer-events: auto; }
     .spinner {
-      width: 40px;
-      height: 40px;
-      border: 3px solid rgba(255, 255, 255, 0.1);
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(255,255,255,0.15);
       border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .empty {
       text-align: center;
-      padding: 40px 20px;
+      padding: 48px 20px;
       color: var(--text2);
     }
-    .empty .icon { font-size: 48px; margin-bottom: 12px; opacity: 0.6; }
-
-    /* iPhone 14 Pro Max specific tuning */
-    @media (min-width: 428px) {
-      .app { max-width: 430px; }
-    }
+    .empty .icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
   </style>
 </head>
 <body>
-  <div class="bg-mesh"></div>
+  <div class="ambient" id="ambient">
+    <div class="ambient-blur" id="amb1"></div>
+    <div class="ambient-blur b2" id="amb2"></div>
+    <div class="ambient-dim"></div>
+  </div>
 
   <div class="app">
-    <header>
-      <div class="logo">
-        <div class="logo-icon">🎧</div>
-        <div class="logo-text">听书</div>
-      </div>
-      <div class="badge">液态玻璃 · 测试版</div>
-    </header>
-
-    <div class="tabs-wrap">
-      <div class="tabs">
-        <button class="tab active" data-tab="library">书架</button>
-        <button class="tab" data-tab="player">播放</button>
-        <button class="tab" data-tab="settings">设置</button>
-      </div>
+    <div class="top-bar" id="topBar">
+      <div class="top-title" id="topTitle">资料库</div>
+      <button class="top-btn" id="topAction" style="visibility:hidden">···</button>
     </div>
 
     <main>
       <!-- Library -->
-      <div id="libraryView">
-        <div class="section-label">导入书籍</div>
-        <div class="upload-card glass" id="uploadArea">
-          <div class="upload-icon">📚</div>
-          <p>点击或拖拽上传电子书</p>
-          <div class="format-row">
-            <span class="format-chip">EPUB</span>
-            <span class="format-chip">TXT</span>
+      <div class="view active" id="libraryView">
+        <div class="upload-pill" id="uploadArea">
+          <div class="upload-icon">＋</div>
+          <div class="upload-text">
+            <strong>导入电子书</strong>
+            <span>支持 EPUB、TXT</span>
           </div>
           <input type="file" id="fileInput" accept=".epub,.txt,.text,text/plain,application/epub+zip" hidden />
         </div>
-
-        <div class="section-label">我的书架</div>
-        <div class="book-list" id="bookList"></div>
+        <div class="section-head">最近添加</div>
+        <div id="bookList"></div>
       </div>
 
       <!-- Player -->
-      <div id="playerView" class="player-view">
-        <div class="player-hero">
-          <div class="cover-stage">
-            <div class="cover-glow" id="coverGlow"></div>
-            <div class="player-cover" id="playerCover">📖</div>
+      <div class="view player-view" id="playerView">
+        <div class="now-playing">
+          <div class="artwork-wrap">
+            <div class="artwork" id="playerCover">📖</div>
           </div>
-          <div class="player-title" id="playerTitle">选择一本书开始听</div>
-          <div class="player-author" id="playerAuthor">—</div>
-        </div>
-
-        <div class="subtitle-box glass" id="subtitleBox">
-          <span style="color:var(--text2)">上传或选择书籍后，这里会显示当前朗读文字…</span>
-        </div>
-
-        <div class="controls">
-          <div class="progress-row">
-            <span class="time" id="currentTime">0:00</span>
-            <div class="progress-track" id="progressTrack">
-              <div class="progress-fill" id="progressFill"></div>
-            </div>
-            <span class="time" id="totalTime">0:00</span>
+          <div class="track-info">
+            <div class="track-title" id="playerTitle">选择一本书</div>
+            <div class="track-artist" id="playerAuthor">开始听书</div>
           </div>
-
-          <div class="main-ctrls">
-            <button class="ctrl" id="btnPrev">⏮</button>
-            <button class="ctrl play" id="btnPlay">▶</button>
-            <button class="ctrl" id="btnNext">⏭</button>
+          <div class="lyrics" id="subtitleBox">上传或选择书籍后，这里显示当前朗读文字</div>
+          <div class="scrubber">
+            <span class="time-label" id="currentTime">0:00</span>
+            <div class="scrub-track" id="progressTrack">
+              <div class="scrub-fill" id="progressFill"></div>
+            </div>
+            <span class="time-label end" id="totalTime">0:00</span>
           </div>
-
-          <div class="sec-ctrls">
-            <div class="engine-row glass">
-              <button class="engine-btn active" data-engine="local">本地语音</button>
-              <button class="engine-btn" data-engine="cloud">云端 AI 语音</button>
+          <div class="transport">
+            <button class="t-btn" id="btnPrev">⏮</button>
+            <button class="t-btn play" id="btnPlay">▶</button>
+            <button class="t-btn" id="btnNext">⏭</button>
+          </div>
+          <div class="extra-row">
+            <div class="chip-group" id="engineGroup">
+              <button class="chip active" data-engine="local">本地</button>
+              <button class="chip" data-engine="cloud">云端</button>
             </div>
-
-            <div class="ctrl-group glass">
-              <label>语速 <span id="rateValue">1.0x</span></label>
-              <input type="range" id="rateRange" min="0.6" max="2.2" step="0.1" value="1.0" />
+            <div class="select-row">
+              <div class="select-box">
+                <label>语速 <span id="rateValue">1.0x</span></label>
+                <input type="range" id="rateRange" min="0.6" max="2.2" step="0.1" value="1.0" />
+              </div>
+              <div class="select-box">
+                <label>音色</label>
+                <select id="voiceSelect"></select>
+              </div>
             </div>
-
-            <div class="ctrl-group glass">
-              <label>音色</label>
-              <select id="voiceSelect"></select>
+            <div style="width:100%;margin-top:4px;">
+              <label style="font-size:11px;color:var(--text3);font-weight:500;display:block;margin-bottom:6px;">
+                定时关闭 <span id="sleepLabel">关</span>
+              </label>
+              <div class="chip-group" id="sleepRow">
+                <button class="chip active" data-min="0">关</button>
+                <button class="chip" data-min="15">15分</button>
+                <button class="chip" data-min="30">30分</button>
+                <button class="chip" data-min="45">45分</button>
+                <button class="chip" data-min="60">60分</button>
+                <button class="chip" data-min="-1">本句后</button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Settings -->
-      <div id="settingsView" class="settings-view">
-        <div class="section-label">语音引擎</div>
-        <div class="setting-row glass">
-          <label>默认引擎</label>
-          <select id="defaultEngine">
-            <option value="local">本地（系统 TTS）</option>
-            <option value="cloud">云端 AI（免费）</option>
-          </select>
+      <div class="view" id="settingsView">
+        <div class="section-head" style="margin-top:8px;">播放</div>
+        <div class="setting-card">
+          <div class="setting-item">
+            <span>默认引擎</span>
+            <select id="defaultEngine">
+              <option value="local">本地（推荐）</option>
+              <option value="cloud">云端</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <span>默认语速</span>
+            <select id="defaultRate">
+              <option value="0.8">0.8x</option>
+              <option value="1.0" selected>1.0x</option>
+              <option value="1.2">1.2x</option>
+              <option value="1.5">1.5x</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <span>自动滚动字幕</span>
+            <input type="checkbox" id="autoScroll" checked style="width:20px;height:20px;accent-color:#fa2d48;" />
+          </div>
         </div>
-
-        <div class="section-label">播放</div>
-        <div class="setting-row glass">
-          <label>默认语速</label>
-          <select id="defaultRate">
-            <option value="0.8">0.8x</option>
-            <option value="1.0" selected>1.0x</option>
-            <option value="1.2">1.2x</option>
-            <option value="1.5">1.5x</option>
-          </select>
-        </div>
-        <div class="setting-row glass">
-          <label>自动滚动字幕</label>
-          <input type="checkbox" id="autoScroll" checked style="width:20px;height:20px;accent-color:#bf5af2;" />
-        </div>
-
-        <div class="section-label">关于</div>
-        <div class="setting-row glass" style="flex-direction:column;align-items:flex-start;gap:8px;">
-          <div style="font-size:15px;font-weight:650;">听书 · 液态玻璃版</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.7;">
-            • 适配 iPhone 14 Pro Max 安全区<br>
-            • 支持 EPUB / TXT 本地解析<br>
-            • 本地语音：Web Speech API<br>
-            • 云端语音：免费 Google TTS 接口<br>
-            • 纯静态，可直接部署 GitHub Pages
+        <div class="section-head">关于</div>
+        <div class="setting-card">
+          <div class="about-block">
+            听书 · Apple Music 风格<br>
+            支持 EPUB / TXT，可删除<br>
+            本地 Web Speech + 有道/百度云端<br>
+            书架本地保存 · 可部署 GitHub Pages
           </div>
         </div>
       </div>
     </main>
 
-    <!-- Dock mini player -->
-    <div class="dock" id="dock">
-      <div class="dock-inner glass-strong">
-        <div class="dock-cover" id="dockCover">📖</div>
-        <div class="dock-info">
-          <div class="dock-title" id="dockTitle">—</div>
-          <div class="dock-state" id="dockState">已暂停</div>
+    <!-- Mini player -->
+    <div class="mini" id="dock">
+      <div class="mini-inner">
+        <div class="mini-art" id="dockCover">📖</div>
+        <div class="mini-info">
+          <div class="mini-title" id="dockTitle">—</div>
+          <div class="mini-sub" id="dockState">已暂停</div>
         </div>
-        <button class="dock-play" id="dockPlay">▶</button>
+        <button class="mini-play" id="dockPlay">▶</button>
+      </div>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="tabbar">
+      <div class="tabbar-inner">
+        <button class="tab active" data-tab="library">
+          <span class="tab-icon">􀎞</span>
+          <span>资料库</span>
+        </button>
+        <button class="tab" data-tab="player">
+          <span class="tab-icon">􀊃</span>
+          <span>正在播放</span>
+        </button>
+        <button class="tab" data-tab="settings">
+          <span class="tab-icon">􀍟</span>
+          <span>设置</span>
+        </button>
       </div>
     </div>
   </div>
 
-  <div class="toast glass-strong" id="toast"></div>
+  <div class="toast" id="toast"></div>
   <div class="loading" id="loading">
     <div class="spinner"></div>
-    <div style="color:var(--text2);font-size:14px;font-weight:500;">正在解析 EPUB…</div>
+    <div style="color:var(--text2);font-size:14px;">正在解析…</div>
   </div>
-
-  <!-- Hidden audio for cloud TTS -->
   <audio id="cloudAudio" preload="auto"></audio>
 
   <script>
     const COVER_COLORS = [
-      ['#5b21b6', '#a78bfa'], ['#1e3a8a', '#60a5fa'], ['#065f46', '#34d399'],
+      ['#5b21b6', '#c084fc'], ['#1e3a8a', '#60a5fa'], ['#065f46', '#34d399'],
       ['#9a3412', '#fb923c'], ['#86198f', '#e879f9'], ['#1e1b4b', '#818cf8'],
       ['#9f1239', '#fb7185'], ['#134e4a', '#2dd4bf']
     ];
@@ -868,15 +846,33 @@
       {
         id: 's3', title: '听书功能演示', author: '系统示例', cover: '🎧', type: 'TXT',
         color: COVER_COLORS[2],
-        content: `欢迎使用听书液态玻璃测试版。
-本页面专为 iPhone 14 Pro Max 适配，采用液态玻璃视觉风格。
-支持本地系统语音，以及免费的云端 AI 语音合成。
-你可以上传 EPUB 或 TXT 电子书，在本地完成解析后直接听书。
-切换引擎、调节语速，体验完整的听书流程。`
+        content: `欢迎使用听书应用。
+界面参考新版 Apple Music 设计。
+推荐使用本地系统语音，中文效果更稳定。
+云端语音使用有道与百度接口，国内可访问。
+支持导入 EPUB、TXT，也可删除书籍。
+书架会保存在本机。`
       }
     ];
 
-    let books = [...SAMPLES];
+    function loadBooksFromStorage() {
+      try {
+        const raw = localStorage.getItem('tingshu_books');
+        if (raw) {
+          const saved = JSON.parse(raw);
+          if (Array.isArray(saved) && saved.length) return saved;
+        }
+      } catch (e) {}
+      return [...SAMPLES];
+    }
+    function saveBooksToStorage() {
+      try {
+        const slim = books.map(b => ({ ...b, content: (b.content || '').slice(0, 100000) }));
+        localStorage.setItem('tingshu_books', JSON.stringify(slim));
+      } catch (e) {}
+    }
+
+    let books = loadBooksFromStorage();
     let currentBook = null;
     let sentences = [];
     let currentIndex = 0;
@@ -886,6 +882,11 @@
     let voices = [];
     let selectedVoice = null;
     let cloudAudio = document.getElementById('cloudAudio');
+    let cloudProvider = 0;
+    let sleepMinutes = 0;
+    let sleepDeadline = 0;
+    let sleepTimerId = null;
+    let sleepAfterSentence = false;
 
     const $ = s => document.querySelector(s);
 
@@ -893,13 +894,27 @@
       const t = $('#toast');
       t.textContent = msg;
       t.classList.add('show');
-      setTimeout(() => t.classList.remove('show'), 2400);
+      setTimeout(() => t.classList.remove('show'), 2200);
     }
 
     function splitSentences(text) {
-      return text.replace(/\r\n/g, '\n').replace(/\n+/g, '\n')
-        .split(/(?<=[。！？；!?;\n])/)
-        .map(s => s.trim()).filter(s => s.length > 1);
+      const raw = text.replace(/\r\n/g, '\n').replace(/\n+/g, '\n')
+        .replace(/([。！？；!?;])\s*/g, '$1\n').split('\n')
+        .map(s => s.trim()).filter(s => s.length > 0);
+      const result = [];
+      for (const part of raw) {
+        if (part.length <= 80) result.push(part);
+        else {
+          const sub = part.split(/(?<=[，、,])/);
+          let buf = '';
+          for (const s of sub) {
+            if ((buf + s).length > 70 && buf) { result.push(buf.trim()); buf = s; }
+            else buf += s;
+          }
+          if (buf.trim()) result.push(buf.trim());
+        }
+      }
+      return result.filter(s => s.length > 1);
     }
 
     function formatTime(sec) {
@@ -919,7 +934,20 @@
       el.textContent = book.cover || '📖';
     }
 
-    // ===== EPUB Parser =====
+    function setAmbient(book) {
+      if (!book) {
+        $('#ambient').classList.remove('on');
+        return;
+      }
+      const [c1, c2] = book.color || pickColor(book.id);
+      document.documentElement.style.setProperty('--amb1', c1);
+      document.documentElement.style.setProperty('--amb2', c2);
+      $('#amb1').style.background = c1;
+      $('#amb2').style.background = c2;
+      $('#ambient').classList.add('on');
+    }
+
+    // EPUB
     async function parseEPUB(file) {
       $('#loading').classList.add('show');
       try {
@@ -932,11 +960,9 @@
         if (!opfPath) throw new Error('找不到 OPF');
         const opfContent = await zip.file(opfPath)?.async('string');
         const opfDoc = parser.parseFromString(opfContent, 'application/xml');
-
         const getMeta = n => opfDoc.querySelector(`metadata > *|${n}, metadata > ${n}`)?.textContent?.trim() || '';
         const title = getMeta('title') || file.name.replace(/\.epub$/i, '');
         const author = getMeta('creator') || '未知作者';
-
         const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
         const manifest = {};
         opfDoc.querySelectorAll('manifest > item').forEach(item => {
@@ -949,7 +975,6 @@
           const idref = ref.getAttribute('idref');
           if (idref && manifest[idref]) spine.push(manifest[idref]);
         });
-
         let fullText = '';
         for (let i = 0; i < Math.min(spine.length, 35); i++) {
           const item = spine[i];
@@ -965,236 +990,130 @@
           } catch (e) {}
         }
         fullText = fullText.trim();
-        if (fullText.length < 30) throw new Error('未能提取正文（可能是加密或图片型 EPUB）');
-        if (fullText.length > 60000) fullText = fullText.slice(0, 60000) + '\n\n……（已截取前部分）';
-
-        return {
-          id: 'epub-' + Date.now(), title, author, cover: '📕', type: 'EPUB',
-          color: pickColor(title), content: fullText
-        };
+        if (fullText.length < 30) throw new Error('未能提取正文');
+        if (fullText.length > 60000) fullText = fullText.slice(0, 60000) + '\n\n……（已截取）';
+        return { id: 'epub-' + Date.now(), title, author, cover: '📕', type: 'EPUB', color: pickColor(title), content: fullText };
       } finally {
         $('#loading').classList.remove('show');
       }
     }
 
-    // ===== Local TTS（中文音色优化）=====
-    // 高质量中文音色名称关键词（按优先级）
-    const PREFERRED_ZH_VOICES = [
-      // iOS / macOS 优质中文
-      'tingting', 'ting-ting', 'meijia', 'mei-jia', 'sinji', 'sin-ji',
-      'yu-shu', 'yushu', 'lilian', 'li-li', 'stella', 'wendy',
-      'susan', 'karen', 'kyoko',
-      // Google / Chrome
-      'google 普通话', 'google普通话', 'google us english', 'google 國語',
-      'google 粤語', 'google 粵語',
-      // Microsoft Edge / Windows
-      'microsoft xiaoxiao', 'microsoft xiaoyi', 'microsoft yunyi',
-      'microsoft xiaohan', 'microsoft xiaomeng', 'microsoft xiaoqiu',
-      'microsoft xiaoxuan', 'microsoft xiaoyan', 'microsoft xiaozhen',
-      'microsoft hsiaochen', 'microsoft hsiaoyu',
-      'xiaoxiao', 'xiaoyi', 'yunxi', 'yunyang', 'xiaomeng',
-      // 通用优质标识
-      'enhanced', 'premium', 'neural', 'natural', 'online'
+    // Voices
+    const PREFERRED_ZH = [
+      'tingting', 'ting-ting', 'meijia', 'mei-jia', 'sinji', 'yu-shu', 'yushu',
+      'google 普通话', 'google普通话', 'microsoft xiaoxiao', 'microsoft xiaoyi',
+      'xiaoxiao', 'xiaoyi', 'yunxi', 'enhanced', 'premium', 'neural'
     ];
-
     function scoreVoice(v) {
       const name = (v.name || '').toLowerCase();
       const lang = (v.lang || '').toLowerCase();
       let score = 0;
-
-      // 语言加分
-      if (lang === 'zh-cn' || lang === 'zh_cn' || lang.startsWith('zh-cn')) score += 100;
-      else if (lang.includes('zh-cn') || lang.includes('cmn-hans')) score += 95;
-      else if (lang.startsWith('zh') || lang.includes('cmn') || lang.includes('chinese')) score += 70;
+      if (lang === 'zh-cn' || lang.startsWith('zh-cn')) score += 100;
+      else if (lang.includes('zh') || lang.includes('cmn')) score += 70;
       else if (lang.startsWith('en')) score += 20;
-      else score += 5;
-
-      // 优质名称加分
-      for (let i = 0; i < PREFERRED_ZH_VOICES.length; i++) {
-        if (name.includes(PREFERRED_ZH_VOICES[i])) {
-          score += 80 - Math.min(i, 20); // 越靠前分越高
-          break;
-        }
+      for (let i = 0; i < PREFERRED_ZH.length; i++) {
+        if (name.includes(PREFERRED_ZH[i])) { score += 80 - Math.min(i, 20); break; }
       }
-
-      // 本地/增强/神经网络加分
-      if (v.localService === false) score += 25; // 云端增强音往往更自然
-      if (name.includes('enhanced') || name.includes('premium') || name.includes('neural')) score += 30;
-      if (name.includes('compact')) score -= 15; // 压缩音质较差
-
-      // 女声轻微加分（听书更常见偏好）
-      if (/female|woman|girl|ting|xiao|mei|li|susan|karen|stella|wendy|yunxia|xiaoxiao|xiaoyi/i.test(name)) {
-        score += 8;
-      }
-
+      if (name.includes('enhanced') || name.includes('neural')) score += 30;
+      if (/female|ting|xiao|mei|yunxia|xiaoxiao/i.test(name)) score += 8;
       return score;
     }
-
     function loadVoices() {
       const all = speechSynthesis.getVoices();
       if (!all.length) return;
-
-      // 打分排序：中文优质音色优先
       voices = [...all].sort((a, b) => scoreVoice(b) - scoreVoice(a));
-
-      // 至少保留一些中文 + 英文
-      const zhVoices = voices.filter(v => {
-        const l = (v.lang || '').toLowerCase();
-        return l.startsWith('zh') || l.includes('cmn') || l.includes('chinese');
-      });
-      const enVoices = voices.filter(v => (v.lang || '').toLowerCase().startsWith('en'));
-
-      // 展示用：中文在前，再跟英文，去重后限制数量
-      const display = [];
-      const seen = new Set();
-      [...zhVoices, ...enVoices, ...voices].forEach(v => {
-        const key = v.name + v.lang;
-        if (!seen.has(key) && display.length < 40) {
-          seen.add(key);
-          display.push(v);
-        }
+      const zh = voices.filter(v => { const l = (v.lang||'').toLowerCase(); return l.startsWith('zh') || l.includes('cmn'); });
+      const en = voices.filter(v => (v.lang||'').toLowerCase().startsWith('en'));
+      const display = [], seen = new Set();
+      [...zh, ...en, ...voices].forEach(v => {
+        const k = v.name + v.lang;
+        if (!seen.has(k) && display.length < 40) { seen.add(k); display.push(v); }
       });
       voices = display.length ? display : all;
-
       const sel = $('#voiceSelect');
-      const prevName = selectedVoice ? selectedVoice.name : null;
+      const prev = selectedVoice?.name;
       sel.innerHTML = '';
-
-      // 分组：中文 / 其他
-      const zhGroup = document.createElement('optgroup');
-      zhGroup.label = '中文音色（推荐）';
-      const otherGroup = document.createElement('optgroup');
-      otherGroup.label = '其他语言';
-
+      const zg = document.createElement('optgroup'); zg.label = '中文';
+      const og = document.createElement('optgroup'); og.label = '其他';
       voices.forEach((v, i) => {
         const o = document.createElement('option');
         o.value = i;
-        const q = scoreVoice(v);
-        const tag = q >= 150 ? ' ★' : q >= 100 ? ' ✓' : '';
-        o.textContent = `${v.name}${tag}`;
-        o.title = `${v.name} · ${v.lang}`;
-        const isZh = (v.lang || '').toLowerCase().startsWith('zh') ||
-                     (v.lang || '').toLowerCase().includes('cmn');
-        if (isZh) zhGroup.appendChild(o);
-        else otherGroup.appendChild(o);
+        o.textContent = v.name + (scoreVoice(v) >= 150 ? ' ★' : '');
+        const isZh = (v.lang||'').toLowerCase().startsWith('zh') || (v.lang||'').toLowerCase().includes('cmn');
+        (isZh ? zg : og).appendChild(o);
       });
-
-      if (zhGroup.children.length) sel.appendChild(zhGroup);
-      if (otherGroup.children.length) sel.appendChild(otherGroup);
-
-      // 恢复或选择最佳中文音色
-      let bestIdx = 0;
-      if (prevName) {
-        const idx = voices.findIndex(v => v.name === prevName);
-        if (idx >= 0) bestIdx = idx;
-      } else {
-        // 选得分最高的中文音色
-        let bestScore = -1;
+      if (zg.children.length) sel.appendChild(zg);
+      if (og.children.length) sel.appendChild(og);
+      let best = 0;
+      if (prev) { const idx = voices.findIndex(v => v.name === prev); if (idx >= 0) best = idx; }
+      else {
+        let bs = -1;
         voices.forEach((v, i) => {
           const s = scoreVoice(v);
-          const isZh = (v.lang || '').toLowerCase().startsWith('zh') ||
-                       (v.lang || '').toLowerCase().includes('cmn');
-          if (isZh && s > bestScore) {
-            bestScore = s;
-            bestIdx = i;
-          }
+          const isZh = (v.lang||'').toLowerCase().startsWith('zh') || (v.lang||'').toLowerCase().includes('cmn');
+          if (isZh && s > bs) { bs = s; best = i; }
         });
       }
-      sel.value = bestIdx;
-      selectedVoice = voices[bestIdx] || voices[0] || null;
-
-      // 首次加载时给用户提示
-      if (selectedVoice && !window._voiceTipShown) {
-        window._voiceTipShown = true;
-        const isZh = (selectedVoice.lang || '').toLowerCase().includes('zh') ||
-                     (selectedVoice.lang || '').toLowerCase().includes('cmn');
-        if (isZh) {
-          console.log('[听书] 已优选中文音色:', selectedVoice.name, selectedVoice.lang);
-        }
-      }
+      sel.value = best;
+      selectedVoice = voices[best] || voices[0] || null;
     }
-
-    if (speechSynthesis.onvoiceschanged !== undefined) {
-      speechSynthesis.onvoiceschanged = loadVoices;
-    }
-    // 多次尝试加载（部分浏览器延迟就绪）
+    if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
     loadVoices();
     setTimeout(loadVoices, 300);
     setTimeout(loadVoices, 1000);
 
-    // ===== Cloud TTS (free Google Translate TTS) =====
-    function cloudTTSUrl(text, lang = 'zh-CN') {
-      const q = encodeURIComponent(text.slice(0, 180));
-      return `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${q}`;
+    // Cloud TTS (China)
+    function buildCloudUrls(text) {
+      const q = encodeURIComponent(text.slice(0, 200));
+      return [
+        `https://dict.youdao.com/dictvoice?audio=${q}&le=zh&type=2`,
+        `https://fanyi.baidu.com/gettts?lan=zh&text=${q}&spd=5&source=web`
+      ];
     }
-
-    function speakCloud(index) {
-      if (!sentences.length || index < 0 || index >= sentences.length) {
-        stopAll();
-        return;
-      }
+    function speakCloud(index, retry = 0) {
+      if (!sentences.length || index < 0 || index >= sentences.length) { stopAll(); return; }
       currentIndex = index;
       updateSubtitle();
       updateProgress();
-
-      const text = sentences[index];
-      const lang = /[\u4e00-\u9fff]/.test(text) ? 'zh-CN' : 'en';
-      const url = cloudTTSUrl(text, lang);
-
-      cloudAudio.onended = () => {
-        if (isPlaying && currentIndex < sentences.length - 1) {
-          speakCloud(currentIndex + 1);
-        } else {
-          isPlaying = false;
-          updatePlayUI();
-        }
-      };
-      cloudAudio.onerror = () => {
-        toast('云端语音暂时不可用，已切回本地');
+      const urls = buildCloudUrls(sentences[index]);
+      const url = urls[(cloudProvider + retry) % urls.length];
+      const onFail = () => {
+        if (retry < urls.length - 1) { cloudProvider = (cloudProvider + 1) % urls.length; speakCloud(index, retry + 1); return; }
+        toast('云端不可用，已切本地');
         currentEngine = 'local';
-        document.querySelectorAll('.engine-btn').forEach(b => {
-          b.classList.toggle('active', b.dataset.engine === 'local');
-        });
+        document.querySelectorAll('#engineGroup .chip').forEach(b => b.classList.toggle('active', b.dataset.engine === 'local'));
         speakLocal(currentIndex);
       };
-
-      cloudAudio.src = url;
-      cloudAudio.playbackRate = Math.min(Math.max(rate, 0.7), 1.5);
-      cloudAudio.play().catch(() => {
-        toast('云端播放失败，尝试本地语音');
-        speakLocal(currentIndex);
-      });
-      isPlaying = true;
-      updatePlayUI();
+      cloudAudio.onended = () => {
+        if (onSentenceEndCheckSleep()) return;
+        if (isPlaying && currentIndex < sentences.length - 1) setTimeout(() => speakCloud(currentIndex + 1), 120);
+        else { isPlaying = false; updatePlayUI(); }
+      };
+      cloudAudio.onerror = onFail;
+      try {
+        cloudAudio.src = url;
+        cloudAudio.playbackRate = Math.min(Math.max(rate * 0.95, 0.75), 1.4);
+        cloudAudio.play().catch(onFail);
+        isPlaying = true;
+        updatePlayUI();
+      } catch (e) { onFail(); }
     }
 
     function speakLocal(index) {
-      if (!sentences.length || index < 0 || index >= sentences.length) {
-        stopAll();
-        return;
-      }
+      if (!sentences.length || index < 0 || index >= sentences.length) { stopAll(); return; }
       speechSynthesis.cancel();
       currentIndex = index;
       updateSubtitle();
       updateProgress();
-
       const text = sentences[index];
       const u = new SpeechSynthesisUtterance(text);
-
-      // 中文优化参数
       const isZh = /[\u4e00-\u9fff]/.test(text);
-      // 中文语速略降更自然（用户 rate 仍生效）
       u.rate = isZh ? Math.max(0.7, rate * 0.95) : rate;
-      // 中文轻微降调，听感更稳
       u.pitch = isZh ? 0.98 : 1.0;
       u.volume = 1;
-
-      // 强制指定语言，帮助引擎选对发音
       u.lang = isZh ? 'zh-CN' : (selectedVoice?.lang || 'en-US');
-
       if (selectedVoice) {
         u.voice = selectedVoice;
-        // 若当前音色不是中文，但文本是中文，尝试临时切到最佳中文音色
         if (isZh) {
           const vLang = (selectedVoice.lang || '').toLowerCase();
           if (!vLang.startsWith('zh') && !vLang.includes('cmn')) {
@@ -1206,8 +1125,8 @@
           }
         }
       }
-
       u.onend = () => {
+        if (onSentenceEndCheckSleep()) return;
         if (isPlaying && currentIndex < sentences.length - 1) speakLocal(currentIndex + 1);
         else { isPlaying = false; updatePlayUI(); }
       };
@@ -1231,60 +1150,99 @@
       updatePlayUI();
     }
 
+    // Sleep timer
+    function clearSleepTimer() {
+      if (sleepTimerId) { clearInterval(sleepTimerId); sleepTimerId = null; }
+      sleepDeadline = 0;
+      sleepAfterSentence = false;
+    }
+    function formatSleepRemain() {
+      if (sleepAfterSentence) return '本句后';
+      if (!sleepDeadline) return '关';
+      const sec = Math.max(0, Math.ceil((sleepDeadline - Date.now()) / 1000));
+      return `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`;
+    }
+    function updateSleepLabel() {
+      const el = $('#sleepLabel');
+      if (!el) return;
+      el.textContent = (sleepMinutes === 0 && !sleepAfterSentence) ? '关' : formatSleepRemain();
+    }
+    function triggerSleepStop() {
+      stopAll();
+      clearSleepTimer();
+      sleepMinutes = 0;
+      document.querySelectorAll('#sleepRow .chip').forEach(c => c.classList.toggle('active', c.dataset.min === '0'));
+      updateSleepLabel();
+      toast('定时关闭');
+    }
+    function startSleepTimer(min) {
+      clearSleepTimer();
+      sleepMinutes = min;
+      sleepAfterSentence = false;
+      if (min === 0) { updateSleepLabel(); toast('已取消定时'); return; }
+      if (min === -1) { sleepAfterSentence = true; updateSleepLabel(); toast('本句结束后关闭'); return; }
+      sleepDeadline = Date.now() + min * 60 * 1000;
+      sleepTimerId = setInterval(() => {
+        updateSleepLabel();
+        updatePlayUI();
+        if (Date.now() >= sleepDeadline) triggerSleepStop();
+      }, 1000);
+      updateSleepLabel();
+      toast(`${min} 分钟后关闭`);
+    }
+    function onSentenceEndCheckSleep() {
+      if (sleepAfterSentence || (sleepDeadline && Date.now() >= sleepDeadline)) {
+        triggerSleepStop();
+        return true;
+      }
+      return false;
+    }
+
     function togglePlay() {
       if (!currentBook || !sentences.length) { toast('请先选择一本书'); return; }
       if (isPlaying) {
-        if (currentEngine === 'cloud') {
-          cloudAudio.pause();
-        } else {
-          speechSynthesis.pause();
-        }
+        if (currentEngine === 'cloud') cloudAudio.pause();
+        else speechSynthesis.pause();
         isPlaying = false;
         updatePlayUI();
       } else {
         if (currentEngine === 'cloud' && cloudAudio.src && !cloudAudio.ended) {
-          cloudAudio.play();
-          isPlaying = true;
-          updatePlayUI();
+          cloudAudio.play(); isPlaying = true; updatePlayUI();
         } else if (currentEngine === 'local' && speechSynthesis.paused) {
-          speechSynthesis.resume();
-          isPlaying = true;
-          updatePlayUI();
-        } else {
-          speak(currentIndex);
-        }
+          speechSynthesis.resume(); isPlaying = true; updatePlayUI();
+        } else speak(currentIndex);
       }
     }
 
-    // ===== UI =====
     function updatePlayUI() {
       const icon = isPlaying ? '⏸' : '▶';
       $('#btnPlay').textContent = icon;
       $('#dockPlay').textContent = icon;
-      $('#dockState').textContent = isPlaying
-        ? `播放中 · ${currentEngine === 'local' ? '本地' : '云端 AI'}`
+      let stateText = isPlaying
+        ? `播放中 · ${currentEngine === 'local' ? '本地' : '云端'}`
         : '已暂停';
-      $('#coverGlow').classList.toggle('playing', isPlaying);
+      if (sleepDeadline || sleepAfterSentence) stateText += ` · ${formatSleepRemain()}`;
+      $('#dockState').textContent = stateText;
       $('#playerCover').classList.toggle('playing', isPlaying);
     }
 
     function updateSubtitle() {
       if (!sentences.length) {
-        $('#subtitleBox').innerHTML = '<span style="color:var(--text2)">暂无内容</span>';
+        $('#subtitleBox').innerHTML = '<span style="color:var(--text3)">暂无内容</span>';
         return;
       }
       const start = Math.max(0, currentIndex - 1);
-      const end = Math.min(sentences.length, currentIndex + 5);
+      const end = Math.min(sentences.length, currentIndex + 4);
       let html = start > 0 ? '… ' : '';
       for (let i = start; i < end; i++) {
         html += i === currentIndex
-          ? `<span class="current">${sentences[i]}</span> `
+          ? `<span class="cur">${sentences[i]}</span> `
           : sentences[i] + ' ';
       }
       if (end < sentences.length) html += '…';
       $('#subtitleBox').innerHTML = html;
       if ($('#autoScroll')?.checked) {
-        const cur = $('#subtitleBox').querySelector('.current');
+        const cur = $('#subtitleBox').querySelector('.cur');
         if (cur) cur.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
@@ -1300,14 +1258,13 @@
       $('#progressFill').style.width = pct + '%';
       const totalChars = sentences.reduce((a, s) => a + s.length, 0);
       const passed = sentences.slice(0, currentIndex + 1).reduce((a, s) => a + s.length, 0);
-      $('#currentTime').textContent = formatTime(passed / (4.2 * rate));
-      $('#totalTime').textContent = formatTime(totalChars / (4.2 * rate));
+      const cps = 4.0 * rate;
+      $('#currentTime').textContent = formatTime(passed / cps);
+      $('#totalTime').textContent = formatTime(totalChars / cps);
       if (currentBook) {
-        const card = document.querySelector(`.book-card[data-id="${currentBook.id}"]`);
-        if (card) {
-          const bar = card.querySelector('.book-progress-bar');
-          if (bar) bar.style.width = pct + '%';
-        }
+        currentBook._progress = pct;
+        const bar = document.querySelector(`.book-row[data-id="${currentBook.id}"] .progress-line > div`);
+        if (bar) bar.style.width = pct + '%';
       }
     }
 
@@ -1320,21 +1277,56 @@
       }
       books.forEach(book => {
         const [c1, c2] = book.color || pickColor(book.id);
-        const card = document.createElement('div');
-        card.className = 'book-card glass' + (currentBook?.id === book.id ? ' active' : '');
-        card.dataset.id = book.id;
-        card.innerHTML = `
-          <div class="book-cover" style="background:linear-gradient(145deg,${c1},${c2})">${book.cover || '📖'}</div>
-          <div class="book-info">
-            <div class="book-title">${book.title}</div>
-            <div class="book-meta">${book.author} · ${(book.content.length / 1000).toFixed(1)}k 字</div>
-            <div class="book-progress"><div class="book-progress-bar"></div></div>
+        const row = document.createElement('div');
+        row.className = 'book-row';
+        row.dataset.id = book.id;
+        const chars = book.content ? book.content.length : 0;
+        row.innerHTML = `
+          <div class="cover-sm" style="background:linear-gradient(145deg,${c1},${c2})">${book.cover || '📖'}</div>
+          <div class="book-meta">
+            <div class="book-name">${book.title}</div>
+            <div class="book-sub">${book.author || '未知'} · ${book.type || 'TXT'} · ${(chars/1000).toFixed(1)}k字</div>
+            <div class="progress-line"><div style="width:${book._progress||0}%"></div></div>
           </div>
-          <div class="book-type">${book.type || 'TXT'}</div>
+          <div class="book-actions">
+            <button class="icon-btn danger" data-del="${book.id}" title="删除">⌫</button>
+          </div>
         `;
-        card.addEventListener('click', () => selectBook(book.id));
-        list.appendChild(card);
+        row.addEventListener('click', e => {
+          if (e.target.closest('[data-del]')) return;
+          selectBook(book.id);
+        });
+        row.querySelector('[data-del]').addEventListener('click', e => {
+          e.stopPropagation();
+          deleteBook(book.id);
+        });
+        list.appendChild(row);
       });
+    }
+
+    function deleteBook(id) {
+      const book = books.find(b => b.id === id);
+      if (!book) return;
+      if (!confirm(`删除「${book.title}」？`)) return;
+      const wasCurrent = currentBook?.id === id;
+      books = books.filter(b => b.id !== id);
+      saveBooksToStorage();
+      if (wasCurrent) {
+        stopAll();
+        currentBook = null;
+        sentences = [];
+        currentIndex = 0;
+        $('#playerTitle').textContent = '选择一本书';
+        $('#playerAuthor').textContent = '开始听书';
+        $('#playerCover').textContent = '📖';
+        $('#playerCover').style.background = '';
+        $('#subtitleBox').textContent = '书籍已删除';
+        $('#dock').classList.remove('show');
+        setAmbient(null);
+        updateProgress();
+      }
+      renderBooks();
+      toast('已删除');
     }
 
     function selectBook(id) {
@@ -1342,26 +1334,32 @@
       if (!book) return;
       stopAll();
       currentBook = book;
-      sentences = splitSentences(book.content);
+      sentences = splitSentences(book.content || '');
       currentIndex = 0;
       $('#playerTitle').textContent = book.title;
-      $('#playerAuthor').textContent = book.author;
+      $('#playerAuthor').textContent = book.author || '未知';
       setCover($('#playerCover'), book);
       setCover($('#dockCover'), book);
       $('#dockTitle').textContent = book.title;
-      $('#dock').style.display = 'block';
+      $('#dock').classList.add('show');
+      setAmbient(book);
       updateSubtitle();
       updateProgress();
       renderBooks();
       switchTab('player');
-      toast(`已加载：${book.title}`);
+      toast(book.title);
     }
 
     function switchTab(name) {
       document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-      $('#libraryView').style.display = name === 'library' ? 'block' : 'none';
-      $('#playerView').classList.toggle('active', name === 'player');
-      $('#settingsView').classList.toggle('active', name === 'settings');
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      const map = { library: 'libraryView', player: 'playerView', settings: 'settingsView' };
+      $(`#${map[name]}`)?.classList.add('active');
+      const titles = { library: '资料库', player: '正在播放', settings: '设置' };
+      $('#topTitle').textContent = titles[name] || '';
+      // ambient only on player when book selected
+      if (name === 'player' && currentBook) setAmbient(currentBook);
+      else if (name !== 'player') setAmbient(null);
     }
 
     // Events
@@ -1375,9 +1373,10 @@
         if (file.name.toLowerCase().endsWith('.epub')) {
           const book = await parseEPUB(file);
           books.unshift(book);
+          saveBooksToStorage();
           renderBooks();
           selectBook(book.id);
-          toast('EPUB 导入成功');
+          toast('导入成功');
         } else {
           const reader = new FileReader();
           reader.onload = e => {
@@ -1388,23 +1387,28 @@
               cover: '📄',
               type: 'TXT',
               color: pickColor(file.name),
-              content: e.target.result.slice(0, 80000)
+              content: e.target.result.slice(0, 100000)
             };
             books.unshift(book);
+            saveBooksToStorage();
             renderBooks();
             selectBook(book.id);
-            toast('TXT 导入成功');
+            toast('导入成功');
           };
           reader.readAsText(file, 'UTF-8');
         }
       } catch (err) {
-        toast('解析失败：' + (err.message || '未知错误'));
+        toast('解析失败：' + (err.message || ''));
       }
       $('#fileInput').value = '';
     });
 
     $('#btnPlay').addEventListener('click', togglePlay);
     $('#dockPlay').addEventListener('click', togglePlay);
+    $('#dock').addEventListener('click', e => {
+      if (e.target.closest('#dockPlay')) return;
+      switchTab('player');
+    });
     $('#btnPrev').addEventListener('click', () => { if (currentIndex > 0) speak(currentIndex - 1); });
     $('#btnNext').addEventListener('click', () => { if (currentIndex < sentences.length - 1) speak(currentIndex + 1); });
 
@@ -1413,19 +1417,26 @@
       $('#rateValue').textContent = rate.toFixed(1) + 'x';
       if (isPlaying) speak(currentIndex);
     });
-
     $('#voiceSelect').addEventListener('change', () => {
       selectedVoice = voices[parseInt($('#voiceSelect').value)];
       if (isPlaying && currentEngine === 'local') speak(currentIndex);
     });
 
-    document.querySelectorAll('.engine-btn').forEach(btn => {
+    document.querySelectorAll('#engineGroup .chip').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.querySelectorAll('.engine-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#engineGroup .chip').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentEngine = btn.dataset.engine;
-        toast(currentEngine === 'local' ? '已切换到本地语音' : '已切换到云端 AI 语音');
+        toast(currentEngine === 'local' ? '本地语音' : '云端语音');
         if (isPlaying) speak(currentIndex);
+      });
+    });
+
+    document.querySelectorAll('#sleepRow .chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('#sleepRow .chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        startSleepTimer(parseInt(chip.dataset.min, 10));
       });
     });
 
@@ -1434,6 +1445,14 @@
       const rect = e.currentTarget.getBoundingClientRect();
       const pct = (e.clientX - rect.left) / rect.width;
       speak(Math.max(0, Math.min(Math.floor(pct * sentences.length), sentences.length - 1)));
+    });
+
+    // Tab icons fallback (SF Symbols may not render on all devices)
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      const icons = ['📚', '🎧', '⚙️'];
+      const iconEl = t.querySelector('.tab-icon');
+      // Use emoji if SF Symbol not supported well
+      iconEl.textContent = icons[i];
     });
 
     renderBooks();
