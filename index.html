@@ -533,7 +533,7 @@
       overflow: hidden;
       animation: slideUp 0.25s ease-out;
     }
-    .drawer-sheet.compact { height: auto; max-height: 70%; }
+    .drawer-sheet.compact { height: auto; max-height: 60%; }
     @keyframes slideUp {
       from { transform: translateY(100%); }
       to { transform: translateY(0); }
@@ -811,37 +811,33 @@
       }
     ];
 
-    // 内置完整的 20+ 官方 Edge TTS 中文神经网络音色列表
-    const ALL_EDGE_VOICES = [
-      { id: 'zh-CN-YunxiNeural', name: '云希 · 阳光男声 (推荐听书)' },
-      { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓 · 温暖女声 (推荐听书)' },
-      { id: 'zh-CN-XiaoyiNeural', name: '晓伊 · 甜美女声' },
-      { id: 'zh-CN-YunyangNeural', name: '云扬 · 新闻男声' },
-      { id: 'zh-CN-YunjianNeural', name: '云健 · 激昂男声 (体育/解说)' },
-      { id: 'zh-CN-XiaochenNeural', name: '晓辰 · 稳重女声' },
-      { id: 'zh-CN-XiaohanNeural', name: '晓涵 · 情感女声' },
-      { id: 'zh-CN-XiaomengNeural', name: '晓梦 · 柔和女声' },
-      { id: 'zh-CN-XiaomoNeural', name: '晓墨 · 叙事女声' },
-      { id: 'zh-CN-XiaoqiuNeural', name: '晓秋 · 自然女声' },
-      { id: 'zh-CN-XiaoruiNeural', name: '晓睿 · 温柔女声' },
-      { id: 'zh-CN-XiaoshuangNeural', name: '晓双 · 童声女' },
-      { id: 'zh-CN-XiaoxuanNeural', name: '晓萱 · 活泼女声' },
-      { id: 'zh-CN-XiaoyanNeural', name: '晓颜 · 温柔女声' },
-      { id: 'zh-CN-XiaozhenNeural', name: '晓甄 · 磁性女声' },
-      { id: 'zh-CN-YunfengNeural', name: '云枫 · 沉稳男声' },
-      { id: 'zh-CN-YunhaoNeural', name: '云皓 · 深沉男声' },
-      { id: 'zh-CN-YunjieNeural', name: '云杰 · 磁性男声' },
-      { id: 'zh-CN-YunxiaNeural', name: '云夏 · 活力男声' },
-      { id: 'zh-CN-YunyeNeural', name: '云野 · 磁性男声' },
-      { id: 'zh-CN-YunzeNeural', name: '云泽 · 播音男声' },
-      { id: 'zh-CN-liaoning-XiaobeiNeural', name: '晓北 · 东北话女声' },
-      { id: 'zh-CN-shaanxi-XiaoniNeural', name: '晓妮 · 陕西话女声' },
-      { id: 'zh-CN-sichuan-YuxiNeural', name: '玉希 · 四川话男声' },
-      { id: 'zh-HK-HiuMaanNeural', name: '晓蔓 · 粤语女声' },
-      { id: 'zh-HK-WanLungNeural', name: '云龙 · 粤语男声' },
-      { id: 'zh-TW-HsiaoChenNeural', name: '晓臻 · 台湾国语女声' },
-      { id: 'zh-TW-YunJheNeural', name: '云哲 · 台湾国语男声' }
+    // Edge TTS 原生中文音色（与 Worker 一致，可自行增删）
+    const EDGE_VOICES = [
+      { id: 'zh-CN-YunxiNeural', name: '云希', desc: '阳光男声 (推荐听书)', group: '普通话' },
+      { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓', desc: '温暖女声 (推荐)', group: '普通话' },
+      { id: 'zh-CN-XiaoyiNeural', name: '晓伊', desc: '甜美女声', group: '普通话' },
+      { id: 'zh-CN-YunyangNeural', name: '云扬', desc: '新闻男声', group: '普通话' },
+      { id: 'zh-CN-YunjianNeural', name: '云健', desc: '激昂男声', group: '普通话' },
+      { id: 'zh-CN-YunxiaNeural', name: '云夏', desc: '可爱少年男声', group: '普通话' },
+      { id: 'zh-CN-liaoning-XiaobeiNeural', name: '晓北', desc: '东北话女声', group: '方言' },
+      { id: 'zh-CN-shaanxi-XiaoniNeural', name: '晓妮', desc: '陕西话女声', group: '方言' },
+      { id: 'zh-HK-HiuMaanNeural', name: '曉曼', desc: '粤语女声', group: '粤语' },
+      { id: 'zh-HK-HiuGaaiNeural', name: '曉佳', desc: '粤语女声', group: '粤语' },
+      { id: 'zh-HK-WanLungNeural', name: '雲龍', desc: '粤语男声', group: '粤语' },
+      { id: 'zh-TW-HsiaoChenNeural', name: '曉臻', desc: '台湾女声', group: '台湾国语' },
+      { id: 'zh-TW-HsiaoYuNeural', name: '曉雨', desc: '台湾女声', group: '台湾国语' },
+      { id: 'zh-TW-YunJheNeural', name: '雲哲', desc: '台湾男声', group: '台湾国语' }
     ];
+    function voiceShortName(id) {
+      const v = EDGE_VOICES.find(x => x.id === id);
+      return v ? v.name : (id ? id.split('-').pop().replace('Neural', '') : '云端音色');
+    }
+    function edgeVoiceOptionsHTML(current) {
+      const groups = [...new Set(EDGE_VOICES.map(v => v.group))];
+      return groups.map(g => `<optgroup label="${g}">` + EDGE_VOICES.filter(v => v.group === g).map(v =>
+        `<option value="${v.id}" ${current === v.id ? 'selected' : ''}>${v.name} · ${v.desc}</option>`
+      ).join('') + '</optgroup>').join('');
+    }
 
     let books = JSON.parse(localStorage.getItem('weread_books') || 'null') || SAMPLE_BOOKS;
     let bookmarks = JSON.parse(localStorage.getItem('weread_bookmarks') || '{}');
@@ -903,10 +899,18 @@
           ]
         });
 
-        navigator.mediaSession.setActionHandler('play', () => { if (!isPlaying) playCurrent(); });
-        navigator.mediaSession.setActionHandler('pause', () => { if (isPlaying) stopPlayback(); });
-        navigator.mediaSession.setActionHandler('previoustrack', () => { if (currentChapIdx > 0) loadChapter(currentChapIdx - 1, 0, isPlaying); });
-        navigator.mediaSession.setActionHandler('nexttrack', () => { if (currentChapIdx < currentBook.chapters.length - 1) loadChapter(currentChapIdx + 1, 0, isPlaying); });
+        navigator.mediaSession.setActionHandler('play', () => {
+          if (!isPlaying) playCurrent();
+        });
+        navigator.mediaSession.setActionHandler('pause', () => {
+          if (isPlaying) stopPlayback();
+        });
+        navigator.mediaSession.setActionHandler('previoustrack', () => {
+          if (currentChapIdx > 0) loadChapter(currentChapIdx - 1, 0, isPlaying);
+        });
+        navigator.mediaSession.setActionHandler('nexttrack', () => {
+          if (currentChapIdx < currentBook.chapters.length - 1) loadChapter(currentChapIdx + 1, 0, isPlaying);
+        });
         navigator.mediaSession.setActionHandler('seekbackward', () => {
           currentSentIdx = Math.max(0, currentSentIdx - 3);
           highlightCurrentSentence();
@@ -1439,9 +1443,9 @@
       engine = mode;
       $('#pillEngineLocal').classList.toggle('active', mode === 'local');
       $('#pillEngineCloud').classList.toggle('active', mode === 'cloud');
-      const found = ALL_EDGE_VOICES.find(v => v.id === edgeConfig.voice);
-      const shortName = found ? found.name.split('·')[0].trim() : (edgeConfig.voice ? edgeConfig.voice.split('-').pop().replace('Neural', '') : '云端音色');
-      $('#labelVoice').textContent = mode === 'cloud' ? shortName : (selectedVoice ? selectedVoice.name.slice(0, 6) : '系统音色');
+      $('#labelVoice').textContent = mode === 'cloud'
+        ? voiceShortName(edgeConfig.voice)
+        : (selectedVoice ? selectedVoice.name.slice(0, 6) : '系统音色');
     }
 
     // ==========================================
@@ -1516,7 +1520,7 @@
     }
 
     // ==========================================
-    // 抽屉控制（内置全部 20+ 音色下拉菜单）
+    // 抽屉控制
     // ==========================================
     let activeDrawerTab = 'toc';
 
@@ -1531,7 +1535,7 @@
       $('#drawerMask').classList.add('show');
     }
 
-    async function renderDrawerBody() {
+    function renderDrawerBody() {
       const box = $('#drawerContent');
       const kw = $('#drawerSearch').value.trim().toLowerCase();
       box.innerHTML = '';
@@ -1576,7 +1580,7 @@
 
       if (activeDrawerTab === 'settings') {
         box.innerHTML = `
-          <h3 style="margin:10px 0 14px;font-size:17px;">云端 Edge TTS 与语音设置</h3>
+          <h3 style="margin:10px 0 16px;font-size:17px;">云端 Edge TTS 与语音设置</h3>
           <div class="form-group">
             <label>Cloudflare Worker 地址</label>
             <input class="form-input" id="cfgUrl" value="${edgeConfig.workerUrl || ''}" placeholder="https://xxx.workers.dev" />
@@ -1586,24 +1590,13 @@
             <input class="form-input" id="cfgToken" type="password" value="${edgeConfig.token || ''}" placeholder="填写环境变量 API_KEY" />
           </div>
           <div class="form-group">
-            <label>云端神经网络音色（内置全部 28 款热门音色）</label>
-            <select class="form-select" id="cfgVoice"></select>
+            <label>云端中文神经网络音色</label>
+            <select class="form-select" id="cfgVoice">
+              ${edgeVoiceOptionsHTML(edgeConfig.voice)}
+            </select>
           </div>
           <button class="save-btn" id="btnSaveCfg">保存云端配置并启用</button>
         `;
-
-        const sel = $('#cfgVoice');
-        sel.innerHTML = '';
-        ALL_EDGE_VOICES.forEach(v => {
-          const opt = document.createElement('option');
-          opt.value = v.id;
-          opt.textContent = v.name;
-          if (v.id === (edgeConfig.voice || 'zh-CN-YunxiNeural')) {
-            opt.selected = true;
-          }
-          sel.appendChild(opt);
-        });
-
         $('#btnSaveCfg').onclick = () => {
           edgeConfig = {
             workerUrl: $('#cfgUrl').value.trim(),
