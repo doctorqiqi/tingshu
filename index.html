@@ -925,22 +925,34 @@
 
     function splitSentences(input) {
       const cleaned = cleanTextForTTS(input);
+      // 只在句末标点处断句，减少请求次数与停顿；过长句再按逗号合并切分
       const raw = cleaned
-        .replace(/([。！？!?；;，,、：:…]+)\s*/g, '$1\n')
+        .replace(/([。！？!?；;]+)\s*/g, '$1\n')
         .split(/\n+/)
         .map(s => s.trim())
         .filter(Boolean);
       const result = [];
-      const hardLimit = 120;
-      const target = 100;
+      const softLimit = 90;
+      const target = 60;
       for (const part of raw) {
-        if (part.length <= hardLimit) {
+        if (part.length <= softLimit) {
           result.push(part);
           continue;
         }
-        for (let i = 0; i < part.length; i += target) {
-          result.push(part.slice(i, i + target).trim());
+        const pieces = part.replace(/([，,、：:]+)\s*/g, '$1\n').split(/\n+/).filter(Boolean);
+        let buf = '';
+        for (const p of pieces) {
+          if (buf && (buf + p).length > target) {
+            result.push(buf.trim());
+            buf = '';
+          }
+          buf += p;
+          while (buf.length > softLimit) {
+            result.push(buf.slice(0, softLimit).trim());
+            buf = buf.slice(softLimit);
+          }
         }
+        if (buf.trim()) result.push(buf.trim());
       }
       return result.filter(Boolean);
     }
@@ -1219,6 +1231,7 @@
 
     function loadChapter(chapIdx, sentIdx = 0, autoPlay = false) {
       if (!currentBook) return;
+      pruneCloudCache(true);
       currentChapIdx = Math.max(0, Math.min(chapIdx, currentBook.chapters.length - 1));
       const chap = currentBook.chapters[currentChapIdx];
       currentSentences = splitSentences(chap.content);
@@ -1360,6 +1373,57 @@
       startKeepAlive();
     }
 
+    // ---- 云端音频预取缓存：提前合成后续句子，句间无需等待网络 ----
+    const cloudCache = new Map(); // key -> { chap, idx, p: Promise<objectUrl> }
+    const PREFETCH_AHEAD = 3;
+
+    function cloudKey(idx) {
+      return `${currentChapIdx}|${idx}|${edgeConfig.voice}|${rate}`;
+    }
+
+    function getCloudAudio(idx) {
+      const key = cloudKey(idx);
+      const hit = cloudCache.get(key);
+      if (hit) return hit.p;
+      const text = currentSentences[idx];
+      const p = fetch(`${edgeConfig.workerUrl.replace(/\/$/, '')}/v1/audio/speech`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${edgeConfig.token}`
+        },
+        body: JSON.stringify({
+          model: 'tts-1',
+          input: text,
+          voice: edgeConfig.voice || 'zh-CN-YunxiNeural',
+          speed: rate,
+          response_format: 'mp3'
+        })
+      }).then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      }).then(blob => URL.createObjectURL(blob));
+      p.catch(() => cloudCache.delete(key));
+      cloudCache.set(key, { chap: currentChapIdx, idx, p });
+      return p;
+    }
+
+    function prefetchCloud() {
+      for (let i = 1; i <= PREFETCH_AHEAD; i++) {
+        const idx = currentSentIdx + i;
+        if (idx < currentSentences.length) getCloudAudio(idx).catch(() => {});
+      }
+    }
+
+    function pruneCloudCache(all = false) {
+      for (const [key, v] of cloudCache) {
+        if (all || v.chap !== currentChapIdx || v.idx < currentSentIdx - 1) {
+          v.p.then(u => URL.revokeObjectURL(u)).catch(() => {});
+          cloudCache.delete(key);
+        }
+      }
+    }
+
     async function playCloudSentence(text) {
       stopKeepAlive();
       const reqId = ++cloudReqId;
@@ -1370,27 +1434,13 @@
         return;
       }
       try {
-        const res = await fetch(`${edgeConfig.workerUrl.replace(/\/$/, '')}/v1/audio/speech`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${edgeConfig.token}`
-          },
-          body: JSON.stringify({
-            model: 'tts-1',
-            input: text,
-            voice: edgeConfig.voice || 'zh-CN-YunxiNeural',
-            speed: rate,
-            response_format: 'mp3'
-          })
-        });
+        const myIdx = currentSentIdx;
+        const urlPromise = getCloudAudio(myIdx);
+        prefetchCloud();
+        const objUrl = await urlPromise;
         if (reqId !== cloudReqId) return;
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        if (reqId !== cloudReqId) return;
-        if (cloudObjectUrl) URL.revokeObjectURL(cloudObjectUrl);
-        cloudObjectUrl = URL.createObjectURL(blob);
-        cloudAudio.src = cloudObjectUrl;
+        pruneCloudCache();
+        cloudAudio.src = objUrl;
         cloudAudio.onended = () => {
           if (isPlaying && reqId === cloudReqId) {
             currentSentIdx++;
