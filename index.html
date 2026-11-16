@@ -928,28 +928,30 @@
       setTimeout(() => t.classList.remove('show'), 2200);
     }
 
-    // 朗读前清洗：保留正文语义，移除 Markdown/排版噪声并规范停顿。
+    // ==========================================
+    // 1. 朗读文本清洗函数：cleanTextForTTS
+    // ==========================================
     function cleanTextForTTS(input) {
       let text = String(input || '').replace(/\r\n?/g, '\n');
-      // 代码块保留代码正文，只去掉围栏；行内代码同样保留内容。
+      // 代码块保留内容，去除围栏
       text = text.replace(/```[\w-]*\s*\n?/g, '').replace(/```/g, '');
       text = text.replace(/`([^`]+)`/g, '$1');
-      // 图片与链接：只朗读可读标题，不朗读 URL。
+      // 图片与链接：仅保留可读标题
       text = text.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
       text = text.replace(/\[([^\]]+)\]\((?:https?:\/\/)?[^)]+\)/gi, '$1');
       text = text.replace(/\b(?:https?:\/\/|www\.)[^\s<>]+/gi, '网址');
       text = text.replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '邮箱地址');
-      // Markdown 标题、引用、列表、强调、删除线与表格分隔符。
+      // Markdown 标题、引用、列表、强调、删除线、表格分隔线
       text = text.replace(/^\s{0,3}#{1,6}\s*/gm, '');
       text = text.replace(/^\s*>+\s?/gm, '');
       text = text.replace(/^\s*(?:[-*+]\s+|\d+[.、)]\s+)/gm, '');
       text = text.replace(/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/gm, '');
       text = text.replace(/\|/g, '，');
       text = text.replace(/\*\*|__|~~|\*|_/g, '');
-      // 去掉书名号、引号及括号外壳，保留其中的文字。
-      text = text.replace(/[《》「」『』“”‘’"'`（）()\[\]【】{}〔〕〈〉]/g, '');
-      // URL 参数尾部常见标点不要被吞进“网址”替换结果。
+      // 书名号、引号、括号去壳（保留内部文字）
+      text = text.replace(/[《》「」『』“”‘’"'`（）()\[\]【}〔〕〈〉]/g, '');
       text = text.replace(/网址[，。；！？、]+/g, '网址，');
+      // 省略号、破折号统一转成自然停顿
       text = text.replace(/[……⋯]{2,}|…+/g, '，');
       text = text.replace(/[—–―－]{1,}/g, '，');
       text = text.replace(/[，,、；;：:]{2,}/g, '，');
@@ -961,6 +963,9 @@
       return text.trim();
     }
 
+    // ==========================================
+    // 3. 分句增强 + 超长兜底
+    // ==========================================
     function splitSentences(input) {
       const text = cleanTextForTTS(input);
       const raw = text.replace(/\r\n?/g, '\n')
@@ -971,7 +976,6 @@
       const target = 100;
       for (const part of raw) {
         if (part.length <= hardLimit) { result.push(part); continue; }
-        // 先按自然停顿符号细分；无标点超长串再按约 100 字兜底切开。
         const pieces = part.split(/(?<=[，,、；;：:。！？!?…])/u).filter(Boolean);
         let buffer = '';
         for (const piece of pieces) {
@@ -989,7 +993,9 @@
       return result.filter(s => s.length > 0);
     }
 
-    // 移动端 Web Speech 保活。只在确实播放时轻触 pause/resume，所有退出路径统一清理。
+    // ==========================================
+    // 2. 移动端 Web Speech 朗读长中断保活机制
+    // ==========================================
     function stopKeepAlive() {
       if (keepAliveTimerId !== null) {
         clearInterval(keepAliveTimerId);
@@ -1006,7 +1012,6 @@
         keepAliveBusy = true;
         try {
           speechSynthesis.pause();
-          // 分开一个短周期恢复，避免 pause/resume 同步执行被部分引擎忽略。
           setTimeout(() => {
             if (isPlaying && currentEngine === 'local') speechSynthesis.resume();
             keepAliveBusy = false;
@@ -1048,7 +1053,7 @@
       $('#ambient').classList.add('on');
     }
 
-    // EPUB
+    // EPUB 异步解析
     async function parseEPUB(file) {
       $('#loading').classList.add('show');
       try {
@@ -1099,14 +1104,14 @@
       }
     }
 
-    // Voices
+    // ==========================================
+    // 4. 音色偏好补全（支持 Edge 神经元音色）
+    // ==========================================
     const PREFERRED_ZH = [
-      'xiaoxiao neural', 'xiaoyi neural', 'yunxi neural', 'yunxia neural',
+      'xiaoxiao', 'xiaoyi', 'yunxi', 'yunxia', 'yunyang', 'yunjian', 'xiaobei',
+      'zh-cn-xiaoxiao', 'zh-cn-xiaoyi', 'zh-cn-yunxi', 'zh-cn-yunxia', 'zh-cn-yunyang',
       'microsoft xiaoxiao', 'microsoft xiaoyi', 'microsoft yunxi', 'microsoft yunxia',
-      'xiaoxiao', 'xiaoyi', 'yunxi', 'yunxia',
-      'zh-cn-xiaoxiao', 'zh-cn-xiaoyi', 'zh-cn-yunxi', 'zh-cn-yunxia',
-      'google 普通话', 'google普通话', 'tingting', 'ting-ting',
-      'meijia', 'mei-jia', 'sinji', 'yu-shu', 'yushu', 'enhanced', 'premium', 'neural'
+      'google 普通话', 'google普通话', 'tingting', 'ting-ting', 'meijia', 'enhanced', 'neural'
     ];
     function scoreVoice(v) {
       const name = (v.name || '').toLowerCase();
@@ -1116,10 +1121,10 @@
       else if (lang.includes('zh') || lang.includes('cmn')) score += 70;
       else if (lang.startsWith('en')) score += 20;
       for (let i = 0; i < PREFERRED_ZH.length; i++) {
-        if (name.includes(PREFERRED_ZH[i])) { score += 80 - Math.min(i, 20); break; }
+        if (name.includes(PREFERRED_ZH[i])) { score += 90 - Math.min(i, 25); break; }
       }
-      if (name.includes('enhanced') || name.includes('neural')) score += 30;
-      if (/female|ting|xiao|mei|yunxia|xiaoxiao/i.test(name)) score += 8;
+      if (name.includes('enhanced') || name.includes('neural')) score += 40;
+      if (/female|ting|xiao|mei|yun/i.test(name)) score += 10;
       return score;
     }
     function loadVoices() {
@@ -1166,7 +1171,7 @@
     setTimeout(loadVoices, 300);
     setTimeout(loadVoices, 1000);
 
-    // Cloud TTS: self-hosted open-source MeloTTS through a Cloudflare Worker gateway.
+    // 云端 Edge TTS 配置与合成
     function loadAzureConfig() {
       try {
         const saved = JSON.parse(localStorage.getItem('tingshu_edge_worker_tts') || '{}');
@@ -1266,7 +1271,6 @@
       if (meloConfig.workerUrl && meloConfig.token) {
         try {
           const blob = await synthesizeMelo(sentences[index]);
-          // 用户在合成期间切换了段落/引擎时，丢弃过期结果。
           if (requestId !== cloudRequestId || currentIndex !== index || currentEngine !== 'cloud') return;
           cloudObjectUrl = URL.createObjectURL(blob);
           playCloudUrl(cloudObjectUrl, index);
@@ -1337,7 +1341,7 @@
       updatePlayUI();
     }
 
-    // Sleep timer
+    // 定时关闭
     function clearSleepTimer() {
       if (sleepTimerId) { clearInterval(sleepTimerId); sleepTimerId = null; }
       sleepDeadline = 0;
@@ -1544,12 +1548,11 @@
       $(`#${map[name]}`)?.classList.add('active');
       const titles = { library: '资料库', player: '正在播放', settings: '设置' };
       $('#topTitle').textContent = titles[name] || '';
-      // ambient only on player when book selected
       if (name === 'player' && currentBook) setAmbient(currentBook);
       else if (name !== 'player') setAmbient(null);
     }
 
-    // Events
+    // 事件绑定
     document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 
     $('#uploadArea').addEventListener('click', () => $('#fileInput').click());
@@ -1634,12 +1637,9 @@
       speak(Math.max(0, Math.min(Math.floor(pct * sentences.length), sentences.length - 1)));
     });
 
-    // Tab icons fallback (SF Symbols may not render on all devices)
     document.querySelectorAll('.tab').forEach((t, i) => {
       const icons = ['📚', '🎧', '⚙️'];
-      const iconEl = t.querySelector('.tab-icon');
-      // Use emoji if SF Symbol not supported well
-      iconEl.textContent = icons[i];
+      t.querySelector('.tab-icon').textContent = icons[i];
     });
 
     renderBooks();
