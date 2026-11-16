@@ -811,30 +811,6 @@
       }
     ];
 
-    // Edge TTS 原生中文音色（可自行增删）
-    const EDGE_VOICES = [
-      { id: 'zh-CN-YunxiNeural', name: '云希', desc: '阳光男声 (推荐听书)', group: '普通话' },
-      { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓', desc: '温暖女声 (推荐)', group: '普通话' },
-      { id: 'zh-CN-XiaoyiNeural', name: '晓伊', desc: '甜美女声', group: '普通话' },
-      { id: 'zh-CN-YunyangNeural', name: '云扬', desc: '新闻男声', group: '普通话' },
-      { id: 'zh-CN-YunjianNeural', name: '云健', desc: '激昂男声', group: '普通话' },
-      { id: 'zh-CN-YunxiaNeural', name: '云夏', desc: '可爱少年男声', group: '普通话' },
-      { id: 'zh-CN-liaoning-XiaobeiNeural', name: '晓北', desc: '东北话女声', group: '方言' },
-      { id: 'zh-CN-shaanxi-XiaoniNeural', name: '晓妮', desc: '陕西话女声', group: '方言' },
-      { id: 'zh-HK-HiuMaanNeural', name: '曉曼', desc: '粤语女声', group: '粤语' },
-      { id: 'zh-HK-HiuGaaiNeural', name: '曉佳', desc: '粤语女声', group: '粤语' },
-      { id: 'zh-HK-WanLungNeural', name: '雲龍', desc: '粤语男声', group: '粤语' },
-      { id: 'zh-TW-HsiaoChenNeural', name: '曉臻', desc: '台湾女声', group: '台湾国语' },
-      { id: 'zh-TW-HsiaoYuNeural', name: '曉雨', desc: '台湾女声', group: '台湾国语' },
-      { id: 'zh-TW-YunJheNeural', name: '雲哲', desc: '台湾男声', group: '台湾国语' }
-    ];
-    function edgeVoiceOptionsHTML(current) {
-      const groups = [...new Set(EDGE_VOICES.map(v => v.group))];
-      return groups.map(g => `<optgroup label="${g}">` + EDGE_VOICES.filter(v => v.group === g).map(v =>
-        `<option value="${v.id}" ${current === v.id ? 'selected' : ''}>${v.name} · ${v.desc}</option>`
-      ).join('') + '</optgroup>').join('');
-    }
-
     let books = JSON.parse(localStorage.getItem('weread_books') || 'null') || SAMPLE_BOOKS;
     let bookmarks = JSON.parse(localStorage.getItem('weread_bookmarks') || '{}');
     let edgeConfig = JSON.parse(localStorage.getItem('tingshu_edge_worker_tts') || '{"workerUrl":"","token":"","voice":"zh-CN-YunxiNeural"}');
@@ -1165,16 +1141,7 @@
         if (child.nodeType !== 1) continue;
         const tag = (child.localName || '').toLowerCase();
         if (SKIP_TAGS.has(tag)) continue;
-
-        // 空锚点/带 id 的行内元素：生成占位 block，保证 #frag 可定位
-        const hasId = child.hasAttribute && (child.hasAttribute('id') || child.hasAttribute('name'));
         const isLeafTag = /^(p|h[1-6])$/.test(tag);
-
-        if (hasId && !child.textContent.trim()) {
-          out.push({ text: '', el: child, anchorOnly: true });
-          continue;
-        }
-
         if (!isLeafTag && child.querySelector(BLOCK_SEL)) {
           out.push({ text: '', el: child, shallow: true });
           walkBlocks(child, out);
@@ -1189,13 +1156,13 @@
       const el = item.el;
       if (!el) return ids;
       const add = e => {
-        const a = e.getAttribute && e.getAttribute('id');
+        const a = e.getAttribute('id');
         if (a) ids.add(a);
-        const n = e.getAttribute && e.getAttribute('name');
+        const n = e.getAttribute('name');
         if (n) ids.add(n);
       };
       add(el);
-      if (!item.shallow && !item.anchorOnly) el.querySelectorAll('[id],[name]').forEach(add);
+      if (!item.shallow) el.querySelectorAll('[id],[name]').forEach(add);
       return ids;
     }
 
@@ -1323,7 +1290,7 @@
           if (t.frag) {
             let found = -1;
             for (let i = start; i < start + f.blocks.length; i++) {
-              if (allBlocks[i].ids && allBlocks[i].ids.has(t.frag)) { found = i; break; }
+              if (allBlocks[i].ids.has(t.frag)) { found = i; break; }
             }
             if (found < 0) {
               const nl = normLabel(t.label);
@@ -1339,51 +1306,38 @@
         return entries;
       };
 
-      // ---- 4. 选择“有效章标题数量最多”的目录源 ----
-      const CH_RE = /^\s*(第\s*[零〇一二三四五六七八九十百千万两0-9０-９]+\s*[章回]|chapter\s*[0-9IVXLC]+)/i;
       let entries = [];
-      let bestScore = -1;
       for (const list of tocLists) {
         const r = resolveToc(list);
-        const score = r.filter(e => CH_RE.test(e.label)).length * 1000 + r.length;
-        if (score > bestScore) {
-          bestScore = score;
-          entries = r;
-        }
+        if (r.length >= 2) { entries = r; break; }
+        if (r.length > entries.length) entries = r;
       }
 
-      // ---- 5. 选定“章”所在的层级（完美对齐微信读书：保留前言/扉页，仅剔除纯目录/版权）----
-      const BLACKLIST_RE = /^(目录|contents?|版权|copyright|书名页|titlepage)$/i;
-
-      function isRealChapterLabel(label) {
-        const t = String(label || '').replace(/\s+/g, ' ').trim();
-        if (!t) return false;
-        if (BLACKLIST_RE.test(t)) return false;
-        return true; 
-      }
-
+      // ---- 选定“章”所在的层级（仿微信读书：目录里的一级项 = 章，小节不拆章）----
+      // 若某一层大量出现“第X章/Chapter N”，以该层为章（卷 > 章 的书会落在第二层）；否则取最顶层
+      let chapDepth = 0;
       if (entries.length) {
-        // 找到最小层级作为基准层
+        const CH_RE = /^\s*(第\s*[零〇一二三四五六七八九十百千万两0-9０-９]+\s*[章回]|chapter\s*[0-9IVXLC]+)/i;
+        const cnt = {};
         let minDepth = Infinity;
-        for (const e of entries) minDepth = Math.min(minDepth, e.depth);
-
-        // 大部分书的目录是平铺的（一级目录），这里保留所有层级，由前端做缩进
-        // 使用去重，处理因为解析问题导致同一个目录项被重复识别
-        const dedup = [];
-        let lastPos = -1;
         for (const e of entries) {
-          // 过滤废页
-          if (!isRealChapterLabel(e.label)) continue;
-          
-          // 如果位置相同，取最后一个（通常层级更深，信息更全）
-          if (e.pos === lastPos && dedup.length > 0) {
-            const prev = dedup[dedup.length - 1];
+          minDepth = Math.min(minDepth, e.depth);
+          if (CH_RE.test(e.label)) cnt[e.depth] = (cnt[e.depth] || 0) + 1;
+        }
+        chapDepth = minDepth;
+        let bestCnt = 1;
+        for (const d of Object.keys(cnt).map(Number).sort((a, b) => a - b)) {
+          if (cnt[d] > bestCnt) { bestCnt = cnt[d]; chapDepth = d; }
+        }
+        // 只保留章及更高层级（卷）；同一位置的父级折叠为“所属卷”
+        const kept = entries.filter(e => e.depth <= chapDepth);
+        const dedup = [];
+        for (const e of kept) {
+          const prev = dedup[dedup.length - 1];
+          if (prev && prev.pos === e.pos) {
             if (prev.depth < e.depth) e.group = prev.group || prev.label;
             dedup[dedup.length - 1] = e;
-          } else {
-            dedup.push(e);
-            lastPos = e.pos;
-          }
+          } else dedup.push(e);
         }
         entries = dedup;
       }
@@ -1395,12 +1349,9 @@
           const t = allBlocks[i].text;
           if (t && normLabel(t) !== bt) texts.push(t);
         }
-        // 只在首段与章节标题完全一致时删一次，避免误删“前言”正文
-        if (texts.length && normLabel(texts[0]) === normLabel(label)) {
-          texts.shift();
-        } else if (texts.length > 1 && normLabel(texts[0] + texts[1]) === normLabel(label)) {
-          texts.splice(0, 2);
-        }
+        // 去掉正文开头与章节标题重复的标题行（含被拆成两行的情况）
+        if (texts.length && normLabel(texts[0]) === normLabel(label)) texts.shift();
+        else if (texts.length > 1 && normLabel(texts[0] + texts[1]) === normLabel(label)) texts.splice(0, 2);
         return texts.join('\n');
       };
 
@@ -1409,21 +1360,17 @@
       if (entries.length >= 2) {
         // 目录为准：每个目录项 = 一章；目录外的文件并入前一章
         if (entries[0].pos > 0) {
-          const label = '开始阅读';
+          const label = '书前内容';
           const content = buildContent(label, 0, entries[0].pos);
           if (content.length >= 300) chapters.push({ title: label, content });
         }
-        
         const groups = [];
         entries.forEach((e, i) => {
           groups.length = e.depth + 1;
           groups[e.depth] = e.label;
-          if (SKIP_LABEL_RE.test(e.label)) return; // 再次过滤“封面”
-          
+          if (SKIP_LABEL_RE.test(e.label)) return;
           const end = i + 1 < entries.length ? entries[i + 1].pos : allBlocks.length;
           const content = buildContent(e.label, e.pos, end);
-          
-          // 过滤空白章
           if (content.length > 20) {
             const ch = { title: e.label, content, level: Math.min(e.depth, 3) };
             const g = e.group || (e.depth > 0 ? groups[e.depth - 1] : '');
@@ -1903,7 +1850,11 @@
           <div class="form-group">
             <label>云端中文神经网络音色</label>
             <select class="form-select" id="cfgVoice">
-              ${edgeVoiceOptionsHTML(edgeConfig.voice)}
+              <option value="zh-CN-YunxiNeural" ${edgeConfig.voice === 'zh-CN-YunxiNeural' ? 'selected' : ''}>云希 · 阳光男声 (推荐听书)</option>
+              <option value="zh-CN-XiaoxiaoNeural" ${edgeConfig.voice === 'zh-CN-XiaoxiaoNeural' ? 'selected' : ''}>晓晓 · 温暖女声</option>
+              <option value="zh-CN-XiaoyiNeural" ${edgeConfig.voice === 'zh-CN-XiaoyiNeural' ? 'selected' : ''}>晓伊 · 甜美女声</option>
+              <option value="zh-CN-YunyangNeural" ${edgeConfig.voice === 'zh-CN-YunyangNeural' ? 'selected' : ''}>云扬 · 新闻男声</option>
+              <option value="zh-CN-YunjianNeural" ${edgeConfig.voice === 'zh-CN-YunjianNeural' ? 'selected' : ''}>云健 · 激昂男声</option>
             </select>
           </div>
           <button class="save-btn" id="btnSaveCfg">保存云端配置并启用</button>
