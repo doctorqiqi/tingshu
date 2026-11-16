@@ -65,7 +65,7 @@
     .view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
     .view.active { display: flex; }
 
-    /* ===== 1. 书架视图 (Bookshelf) ===== */
+    /* ===== 1. 书架视图 ===== */
     .shelf-header {
       padding: 14px 20px 10px;
       display: flex;
@@ -170,7 +170,7 @@
     }
     .card-prog { font-size: 11px; color: var(--text3); margin-top: 2px; }
 
-    /* ===== 2. 微信读书原文阅读视图 (Reader) ===== */
+    /* ===== 2. 原文阅读视图 ===== */
     .reader-view { background: var(--reader-bg); color: var(--reader-text); }
     .reader-top {
       height: 46px;
@@ -232,7 +232,6 @@
     }
     .para-block { margin-bottom: 16px; text-align: justify; }
 
-    /* 右下角悬浮“听”字按钮 */
     .fab-listen {
       position: absolute;
       right: 20px;
@@ -263,7 +262,6 @@
       100% { box-shadow: 0 0 0 0 rgba(27, 136, 238, 0); }
     }
 
-    /* 阅读器底部工具栏 */
     .reader-bottom {
       height: calc(50px + var(--safe-bottom));
       padding-bottom: var(--safe-bottom);
@@ -289,7 +287,7 @@
     }
     .r-tab span { font-size: 10px; margin-top: 2px; }
 
-    /* ===== 3. 微信读书 AI 听书播放页 (Audio Player) ===== */
+    /* ===== 3. AI 听书播放页 ===== */
     .player-view { background: var(--bg); color: var(--text); }
     .player-top {
       height: 48px;
@@ -332,7 +330,6 @@
       overflow-y: auto;
     }
 
-    /* 居中书籍立体封面 */
     .player-art-box {
       margin-top: 8px;
       width: 175px;
@@ -349,7 +346,6 @@
     .player-art-title { font-size: 18px; font-weight: 700; line-height: 1.35; }
     .player-art-author { font-size: 12px; opacity: 0.85; }
 
-    /* 当前章节与实时字幕 */
     .player-info {
       text-align: center;
       width: 100%;
@@ -377,7 +373,6 @@
       padding: 0 10px;
     }
 
-    /* 四宫格快捷功能区 (定时/音色/语速/书签) */
     .action-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -414,7 +409,6 @@
     }
     .grid-label { font-size: 11px; white-space: nowrap; }
 
-    /* 进度条 + 前后15秒 */
     .scrub-row {
       display: flex;
       align-items: center;
@@ -474,7 +468,6 @@
       pointer-events: none;
     }
 
-    /* 底部五键主控区 */
     .transport-row {
       display: flex;
       align-items: center;
@@ -518,7 +511,7 @@
     }
     .main-play-btn:active { transform: scale(0.95); }
 
-    /* ===== 底部弹出抽屉 (目录 / 书签 / 音色设置) ===== */
+    /* ===== 底部弹出抽屉 (目录 / 书签 / 定时 / 设置) ===== */
     .drawer-mask {
       position: fixed;
       inset: 0;
@@ -540,6 +533,7 @@
       overflow: hidden;
       animation: slideUp 0.25s ease-out;
     }
+    .drawer-sheet.compact { height: auto; max-height: 60%; }
     @keyframes slideUp {
       from { transform: translateY(100%); }
       to { transform: translateY(0); }
@@ -597,6 +591,37 @@
     .list-row-title { font-size: 15px; line-height: 1.4; }
     .list-row.active .list-row-title { color: var(--blue); font-weight: 600; }
     .list-row-sub { font-size: 12px; color: var(--text3); margin-top: 3px; }
+
+    /* 定时关闭网格与自定义输入 */
+    .sleep-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 12px 0 16px;
+    }
+    .sleep-chip {
+      padding: 12px 8px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 500;
+      text-align: center;
+      cursor: pointer;
+    }
+    .sleep-chip.active {
+      border-color: var(--blue);
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-weight: 600;
+    }
+    .custom-sleep-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+    }
 
     /* 设置表单弹窗 */
     .form-group { margin-bottom: 14px; }
@@ -667,7 +692,6 @@
       </div>
       <div class="reader-body" id="readerBody"></div>
 
-      <!-- 右下角悬浮“听”字按钮 -->
       <button class="fab-listen" id="fabListen" title="进入听书模式">听</button>
 
       <div class="reader-bottom">
@@ -690,19 +714,16 @@
       </div>
 
       <div class="player-main">
-        <!-- 居中书籍封面 -->
         <div class="player-art-box" id="playerCoverBox">
           <div class="player-art-title" id="playerBookTitle">书名</div>
           <div class="player-art-author" id="playerBookAuthor">作者</div>
         </div>
 
-        <!-- 章节名与实时朗读字幕 -->
         <div class="player-info">
           <div class="player-chap" id="playerChapTitle">第一章</div>
           <div class="player-live-text" id="playerSubtitle">准备就绪，点击下方播放按钮开始听书</div>
         </div>
 
-        <!-- 四宫格功能控制 -->
         <div class="action-grid">
           <button class="grid-item" id="btnSleep">
             <div class="grid-icon">🕒</div>
@@ -722,7 +743,6 @@
           </button>
         </div>
 
-        <!-- 进度条与前后 15 秒 -->
         <div class="scrub-row">
           <button class="skip-btn" id="btnSkipBack">-15</button>
           <div class="scrub-bar-wrap" id="scrubWrap">
@@ -734,7 +754,6 @@
           <button class="skip-btn" id="btnSkipFwd">+15</button>
         </div>
 
-        <!-- 底部五键控制区 -->
         <div class="transport-row">
           <button class="side-ctrl" id="btnGoText">📖<span>原文</span></button>
           <button class="chap-btn" id="btnPrevChap" title="上一章">⏮</button>
@@ -746,9 +765,9 @@
     </div>
   </div>
 
-  <!-- ================= 抽屉弹窗：目录 / 书签 / 云端配置 ================= -->
+  <!-- ================= 抽屉弹窗：目录 / 书签 / 定时 / 设置 ================= -->
   <div class="drawer-mask" id="drawerMask">
-    <div class="drawer-sheet" onclick="event.stopPropagation()">
+    <div class="drawer-sheet" id="drawerSheet" onclick="event.stopPropagation()">
       <div class="drawer-handle"></div>
       <div class="drawer-tabs" id="drawerHeader">
         <button class="d-tab active" data-dtab="toc">目录</button>
@@ -794,9 +813,8 @@
       }
     ];
 
-    // 状态存储
     let books = JSON.parse(localStorage.getItem('weread_books') || 'null') || SAMPLE_BOOKS;
-    let bookmarks = JSON.parse(localStorage.getItem('weread_bookmarks') || '{}'); // { bookId: [ { id, chapIdx, sentIdx, chapTitle, snippet, time } ] }
+    let bookmarks = JSON.parse(localStorage.getItem('weread_bookmarks') || '{}');
     let edgeConfig = JSON.parse(localStorage.getItem('tingshu_edge_worker_tts') || '{"workerUrl":"","token":"","voice":"zh-CN-YunxiNeural"}');
 
     let currentBook = null;
@@ -804,12 +822,11 @@
     let currentSentences = [];
     let currentSentIdx = 0;
     let isPlaying = false;
-    let engine = 'local'; // 'local' | 'cloud'
+    let engine = 'local';
     let rate = 1.0;
     let fontSize = 18;
-    let themeIdx = 0; // 0: 默认白, 1: 护眼黄, 2: 夜间黑
+    let themeIdx = 0;
 
-    // 语音与保活变量
     let voices = [];
     let selectedVoice = null;
     let keepAliveTimer = null;
@@ -817,8 +834,11 @@
     let cloudAudio = document.getElementById('cloudAudio');
     let cloudObjectUrl = null;
     let cloudReqId = 0;
-    let sleepTimer = null;
-    let sleepMin = 0;
+
+    // 定时关闭状态
+    let sleepMode = 'off'; // 'off' | 'min' | 'chapter'
+    let sleepDeadline = 0;
+    let sleepIntervalId = null;
 
     const $ = s => document.querySelector(s);
 
@@ -839,9 +859,7 @@
       }
     }
 
-    // ==========================================
-    // 1. 朗读文本清洗 cleanTextForTTS
-    // ==========================================
+    // 朗读文本清洗
     function cleanTextForTTS(input) {
       let text = String(input || '').replace(/\r\n?/g, '\n');
       text = text.replace(/```[\w-]*\s*\n?/g, '').replace(/```/g, '');
@@ -853,9 +871,7 @@
       text = text.replace(/^\s*>+\s?/gm, '');
       text = text.replace(/\|/g, '，');
       text = text.replace(/\*\*|__|~~|\*|_/g, '');
-      // 书名号/引号/括号去壳，保留文字
       text = text.replace(/[《》「」『』“”‘’"'`（）()\[\]【】{}〔〕〈〉]/g, '');
-      // 省略号与破折号转为自然停顿
       text = text.replace(/[……⋯]{2,}|…+/g, '，');
       text = text.replace(/[—–―－]{1,}/g, '，');
       text = text.replace(/[，,、；;：:]{2,}/g, '，');
@@ -864,9 +880,6 @@
       return text.trim();
     }
 
-    // ==========================================
-    // 3. 分句增强 + 120字超长兜底
-    // ==========================================
     function splitSentences(input) {
       const cleaned = cleanTextForTTS(input);
       const raw = cleaned
@@ -889,9 +902,6 @@
       return result.filter(Boolean);
     }
 
-    // ==========================================
-    // 2. 移动端 Web Speech 朗读保活机制
-    // ==========================================
     function stopKeepAlive() {
       if (keepAliveTimer !== null) {
         clearInterval(keepAliveTimer);
@@ -919,9 +929,6 @@
       }, 8000);
     }
 
-    // ==========================================
-    // 4. 音色偏好补全
-    // ==========================================
     const PREFERRED_ZH = [
       'xiaoxiao', 'xiaoyi', 'yunxi', 'yunxia', 'yunyang', 'yunjian',
       'zh-cn-xiaoxiao', 'zh-cn-xiaoyi', 'zh-cn-yunxi', 'zh-cn-yunxia',
@@ -943,7 +950,7 @@
     loadVoices();
 
     // ==========================================
-    // 书架与文件导入（自动识别目录分章）
+    // 1. 修复 EPUB 与 TXT 目录解析（读取 NCX / NAV 目录映射）
     // ==========================================
     function renderShelf() {
       const grid = $('#bookGrid');
@@ -978,12 +985,12 @@
     function splitTxtToChapters(rawText, bookTitle) {
       const lines = rawText.replace(/\r\n?/g, '\n').split('\n');
       const chapters = [];
-      const chapRegex = /^\s*(第[零一二三四五六七八九十百千万0-9]+[章回节卷集部篇].*|序言|前言|后记|引子|尾声)\s*$/;
-      let curTitle = '正文开始';
+      const chapRegex = /^\s*(第[零一二三四五六七八九十百千万0-9]+[章回节卷集部篇].*|序言|序章|前言|后记|引子|楔子|尾声|番外.*)\s*$/;
+      let curTitle = '开始阅读';
       let curBuf = [];
 
       for (const line of lines) {
-        if (chapRegex.test(line) && line.length < 40) {
+        if (chapRegex.test(line) && line.length < 45) {
           if (curBuf.join('\n').trim().length > 0) {
             chapters.push({ title: curTitle, content: curBuf.join('\n').trim() });
           }
@@ -996,7 +1003,6 @@
       if (curBuf.join('\n').trim().length > 0) {
         chapters.push({ title: curTitle, content: curBuf.join('\n').trim() });
       }
-      // 如果全书没有识别出章标题，按每 3000 字自动切分
       if (chapters.length <= 1 && rawText.length > 3500) {
         const auto = [];
         for (let i = 0; i < rawText.length; i += 3000) {
@@ -1010,6 +1016,16 @@
       return chapters.length ? chapters : [{ title: bookTitle, content: rawText }];
     }
 
+    function normalizePath(baseDir, relPath) {
+      const clean = decodeURIComponent(relPath.split('#')[0]);
+      const stack = baseDir ? baseDir.split('/').filter(Boolean) : [];
+      for (const part of clean.split('/')) {
+        if (part === '..') stack.pop();
+        else if (part && part !== '.') stack.push(part);
+      }
+      return stack.join('/');
+    }
+
     async function parseEpubChapters(file) {
       const zip = await JSZip.loadAsync(file);
       const containerXml = await zip.file('META-INF/container.xml')?.async('string');
@@ -1018,32 +1034,87 @@
       const opfPath = parser.parseFromString(containerXml, 'application/xml').querySelector('rootfile')?.getAttribute('full-path');
       const opfXml = await zip.file(opfPath)?.async('string');
       const opfDoc = parser.parseFromString(opfXml, 'application/xml');
-      const title = opfDoc.querySelector('metadata > *|title, metadata > title')?.textContent?.trim() || file.name.replace(/\.epub$/i, '');
+      const bookTitle = opfDoc.querySelector('metadata > *|title, metadata > title')?.textContent?.trim() || file.name.replace(/\.epub$/i, '');
       const author = opfDoc.querySelector('metadata > *|creator, metadata > creator')?.textContent?.trim() || '未知作者';
-      const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+      const opfDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/')) : '';
 
       const manifest = {};
+      let ncxHref = '';
+      let navHref = '';
       opfDoc.querySelectorAll('manifest > item').forEach(it => {
-        manifest[it.getAttribute('id')] = {
-          href: opfDir + it.getAttribute('href'),
-          media: it.getAttribute('media-type') || ''
-        };
+        const id = it.getAttribute('id');
+        const href = it.getAttribute('href');
+        const media = it.getAttribute('media-type') || '';
+        const props = it.getAttribute('properties') || '';
+        const fullHref = normalizePath(opfDir, href);
+        manifest[id] = { href: fullHref, media };
+        if (media === 'application/x-dtbncx+xml') ncxHref = fullHref;
+        if (props.includes('nav')) navHref = fullHref;
       });
+
+      // 构建 href -> 真实目录名称 映射表
+      const tocMap = {};
+      if (ncxHref && zip.file(ncxHref)) {
+        const ncxStr = await zip.file(ncxHref).async('string');
+        const ncxDoc = parser.parseFromString(ncxStr, 'application/xml');
+        const ncxDir = ncxHref.includes('/') ? ncxHref.slice(0, ncxHref.lastIndexOf('/')) : '';
+        ncxDoc.querySelectorAll('navPoint').forEach(np => {
+          const label = np.querySelector('navLabel > text')?.textContent?.trim();
+          const src = np.querySelector('content')?.getAttribute('src');
+          if (label && src) {
+            const targetPath = normalizePath(ncxDir, src);
+            if (!tocMap[targetPath]) tocMap[targetPath] = label;
+          }
+        });
+      }
+      if (Object.keys(tocMap).length === 0 && navHref && zip.file(navHref)) {
+        const navStr = await zip.file(navHref).async('string');
+        const navDoc = parser.parseFromString(navStr, 'application/xhtml+xml');
+        const navDir = navHref.includes('/') ? navHref.slice(0, navHref.lastIndexOf('/')) : '';
+        navDoc.querySelectorAll('nav a').forEach(a => {
+          const label = a.textContent?.trim();
+          const href = a.getAttribute('href');
+          if (label && href) {
+            const targetPath = normalizePath(navDir, href);
+            if (!tocMap[targetPath]) tocMap[targetPath] = label;
+          }
+        });
+      }
 
       const chapters = [];
       const itemrefs = Array.from(opfDoc.querySelectorAll('spine > itemref'));
       for (const ref of itemrefs) {
         const item = manifest[ref.getAttribute('idref')];
         if (!item || (!item.media.includes('html') && !item.media.includes('xml'))) continue;
-        const htmlStr = await zip.file(item.href)?.async('string');
-        if (!htmlStr) continue;
+        const zipEntry = zip.file(item.href);
+        if (!zipEntry) continue;
+        const htmlStr = await zipEntry.async('string');
         const doc = parser.parseFromString(htmlStr, 'application/xhtml+xml');
         doc.querySelectorAll('script, style, nav').forEach(el => el.remove());
-        const hTitle = doc.querySelector('h1, h2, h3, title')?.textContent?.trim();
+
+        // 优先从 NCX/NAV 目录映射表取标题；其次取正文内部 h1-h4 / 首个短段落（避开统一等于书名的 <title>）
+        let chapTitle = tocMap[item.href] || '';
+        if (!chapTitle) {
+          const headings = Array.from(doc.querySelectorAll('h1, h2, h3, h4, .title, .chapter-title'));
+          for (const h of headings) {
+            const t = h.textContent?.replace(/\s+/g, ' ').trim();
+            if (t && t !== bookTitle && t.length <= 45) {
+              chapTitle = t;
+              break;
+            }
+          }
+        }
+        if (!chapTitle) {
+          const firstLine = Array.from(doc.querySelectorAll('p, div'))
+            .map(p => p.textContent?.replace(/\s+/g, ' ').trim())
+            .find(t => t && t !== bookTitle && t.length > 1 && t.length <= 36);
+          if (firstLine) chapTitle = firstLine;
+        }
+
         const bodyText = (doc.body?.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
-        if (bodyText.length > 30) {
+        if (bodyText.length > 20) {
           chapters.push({
-            title: hTitle && hTitle.length < 45 ? hTitle : `第 ${chapters.length + 1} 章`,
+            title: chapTitle || `第 ${chapters.length + 1} 部分`,
             content: bodyText
           });
         }
@@ -1051,7 +1122,7 @@
       if (!chapters.length) throw new Error('未能提取到有效章节正文');
       return {
         id: 'book-' + Date.now(),
-        title,
+        title: bookTitle,
         author,
         coverBg: COVER_PALETTES[books.length % COVER_PALETTES.length],
         chapters
@@ -1075,7 +1146,7 @@
             title,
             author: '本地导入',
             coverBg: COVER_PALETTES[books.length % COVER_PALETTES.length],
-            chapters: splitTxtToChapters(text.slice(0, 500000), title)
+            chapters: splitTxtToChapters(text.slice(0, 600000), title)
           };
         }
         books.unshift(newBook);
@@ -1089,7 +1160,7 @@
     };
 
     // ==========================================
-    // 打开书籍与章节切换
+    // 阅读器与章节切换
     // ==========================================
     function switchView(viewId) {
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -1112,12 +1183,10 @@
       currentSentences = splitSentences(chap.content);
       currentSentIdx = Math.max(0, Math.min(sentIdx, currentSentences.length - 1));
 
-      // 记录阅读进度
       currentBook._lastChap = currentChapIdx;
       currentBook._lastSent = currentSentIdx;
       saveAll();
 
-      // 更新阅读器 UI
       $('#readerTopChap').textContent = chap.title;
       const bodyEl = $('#readerBody');
       bodyEl.innerHTML = `<div class="reader-chap-title">${chap.title}</div>`;
@@ -1137,7 +1206,6 @@
       });
       bodyEl.appendChild(para);
 
-      // 更新播放页 UI
       $('#playerCoverBox').style.background = currentBook.coverBg;
       $('#playerBookTitle').textContent = currentBook.title;
       $('#playerBookAuthor').textContent = currentBook.author || '本地电子书';
@@ -1177,7 +1245,7 @@
     }
 
     // ==========================================
-    // 核心朗读控制 (本地 Web Speech + Cloudflare Edge TTS)
+    // 核心朗读引擎与定时关闭控制
     // ==========================================
     function stopPlayback() {
       stopKeepAlive();
@@ -1201,7 +1269,13 @@
     async function playCurrent() {
       if (!currentSentences.length) return;
       if (currentSentIdx >= currentSentences.length) {
-        // 自动跳下一章
+        // 如果设置了“播完本章关闭”
+        if (sleepMode === 'chapter') {
+          stopPlayback();
+          clearSleepTimer();
+          toast('本章已播完，定时关闭已生效');
+          return;
+        }
         if (currentChapIdx < currentBook.chapters.length - 1) {
           loadChapter(currentChapIdx + 1, 0, true);
         } else {
@@ -1237,9 +1311,7 @@
           playCurrent();
         }
       };
-      u.onerror = () => {
-        stopKeepAlive();
-      };
+      u.onerror = () => stopKeepAlive();
       speechSynthesis.speak(u);
       startKeepAlive();
     }
@@ -1284,18 +1356,15 @@
         await cloudAudio.play();
       } catch (err) {
         if (reqId !== cloudReqId) return;
-        toast('云端接口波动，自动无缝切换本地');
+        toast('云端接口波动，自动切换本地');
         setEngine('local');
         playLocalSentence(text);
       }
     }
 
     function togglePlay() {
-      if (isPlaying) {
-        stopPlayback();
-      } else {
-        playCurrent();
-      }
+      if (isPlaying) stopPlayback();
+      else playCurrent();
     }
 
     function setEngine(mode) {
@@ -1308,15 +1377,60 @@
     }
 
     // ==========================================
-    // 书签功能 (添加 / 列表 / 跳转)
+    // 2. 定时关闭（支持自定义分钟数 + 实时倒计时）
+    // ==========================================
+    function clearSleepTimer() {
+      clearInterval(sleepIntervalId);
+      sleepIntervalId = null;
+      sleepMode = 'off';
+      sleepDeadline = 0;
+      $('#labelSleep').textContent = '定时关闭';
+      $('#btnSleep').classList.remove('active');
+    }
+
+    function applySleepSetting(mode, minutes = 0) {
+      clearSleepTimer();
+      if (mode === 'off') {
+        toast('已关闭定时');
+        return;
+      }
+      if (mode === 'chapter') {
+        sleepMode = 'chapter';
+        $('#labelSleep').textContent = '播完本章';
+        $('#btnSleep').classList.add('active');
+        toast('将在本章节朗读结束后关闭');
+        return;
+      }
+      const mins = Math.max(1, Math.min(480, Number(minutes) || 0));
+      sleepMode = 'min';
+      sleepDeadline = Date.now() + mins * 60000;
+      $('#btnSleep').classList.add('active');
+      const tick = () => {
+        const left = Math.max(0, Math.ceil((sleepDeadline - Date.now()) / 1000));
+        if (left <= 0) {
+          stopPlayback();
+          clearSleepTimer();
+          toast('定时时间到，已停止播放');
+          return;
+        }
+        const m = Math.floor(left / 60);
+        const s = left % 60;
+        $('#labelSleep').textContent = `${m}:${String(s).padStart(2, '0')}`;
+      };
+      tick();
+      sleepIntervalId = setInterval(tick, 1000);
+      toast(`已设置 ${mins} 分钟后关闭`);
+    }
+
+    // ==========================================
+    // 书签功能
     // ==========================================
     function addBookmark() {
       if (!currentBook) return;
       const list = bookmarks[currentBook.id] || [];
       const chap = currentBook.chapters[currentChapIdx];
       const snippet = (currentSentences[currentSentIdx] || chap.title).slice(0, 42);
-      const exists = list.some(b => b.chapIdx === currentChapIdx && b.sentIdx === currentSentIdx);
-      if (exists) {
+      if (list.some(b => b.chapIdx === currentChapIdx && b.sentIdx === currentSentIdx)) {
         toast('当前位置已添加过书签');
         return;
       }
@@ -1334,13 +1448,15 @@
     }
 
     // ==========================================
-    // 抽屉控制 (目录 / 书签 / 设置)
+    // 抽屉控制 (目录 / 书签 / 自定义定时 / 语音设置)
     // ==========================================
     let activeDrawerTab = 'toc';
 
     function openDrawer(tab = 'toc') {
       activeDrawerTab = tab;
-      $('#drawerHeader').style.display = tab === 'settings' ? 'none' : 'flex';
+      const sheet = $('#drawerSheet');
+      sheet.classList.toggle('compact', tab === 'sleep' || tab === 'settings');
+      $('#drawerHeader').style.display = (tab === 'toc' || tab === 'bookmarks') ? 'flex' : 'none';
       document.querySelectorAll('.d-tab').forEach(b => b.classList.toggle('active', b.dataset.dtab === tab));
       $('#drawerSearch').value = '';
       renderDrawerBody();
@@ -1351,6 +1467,44 @@
       const box = $('#drawerContent');
       const kw = $('#drawerSearch').value.trim().toLowerCase();
       box.innerHTML = '';
+
+      if (activeDrawerTab === 'sleep') {
+        box.innerHTML = `
+          <h3 style="margin:8px 0 4px;font-size:16px;">定时关闭</h3>
+          <p style="font-size:12px;color:var(--text3);">选择预设时间或输入自定义分钟数</p>
+          <div class="sleep-grid">
+            <div class="sleep-chip ${sleepMode === 'off' ? 'active' : ''}" data-smode="off">不开启</div>
+            <div class="sleep-chip ${sleepMode === 'chapter' ? 'active' : ''}" data-smode="chapter">播完本章</div>
+            <div class="sleep-chip" data-smode="min" data-min="15">15 分钟</div>
+            <div class="sleep-chip" data-smode="min" data-min="30">30 分钟</div>
+            <div class="sleep-chip" data-smode="min" data-min="45">45 分钟</div>
+            <div class="sleep-chip" data-smode="min" data-min="60">60 分钟</div>
+          </div>
+          <div class="form-group">
+            <label>自定义时长（1 ~ 480 分钟）</label>
+            <div class="custom-sleep-row">
+              <input class="form-input" id="customSleepInput" type="number" min="1" max="480" placeholder="例如：25" />
+              <button class="save-btn" id="btnConfirmCustomSleep" style="margin-top:0;width:110px;flex-shrink:0;">确定</button>
+            </div>
+          </div>
+        `;
+        box.querySelectorAll('.sleep-chip').forEach(chip => {
+          chip.onclick = () => {
+            applySleepSetting(chip.dataset.smode, chip.dataset.min);
+            $('#drawerMask').classList.remove('show');
+          };
+        });
+        $('#btnConfirmCustomSleep').onclick = () => {
+          const val = parseInt($('#customSleepInput').value, 10);
+          if (!val || val < 1) {
+            toast('请输入有效的分钟数');
+            return;
+          }
+          applySleepSetting('min', val);
+          $('#drawerMask').classList.remove('show');
+        };
+        return;
+      }
 
       if (activeDrawerTab === 'settings') {
         box.innerHTML = `
@@ -1467,11 +1621,9 @@
       if (isPlaying) playCurrent();
     };
 
-    // 引擎切换
     $('#pillEngineLocal').onclick = () => { setEngine('local'); if (isPlaying) playCurrent(); };
     $('#pillEngineCloud').onclick = () => { setEngine('cloud'); if (isPlaying) playCurrent(); };
 
-    // 四宫格快捷按钮
     $('#btnRateCycle').onclick = () => {
       const rates = [1.0, 1.2, 1.5, 1.8, 2.0, 0.8];
       rate = rates[(rates.indexOf(rate) + 1) % rates.length];
@@ -1481,30 +1633,8 @@
     $('#btnVoiceCycle').onclick = () => openDrawer('settings');
     $('#btnAddBookmark').onclick = addBookmark;
     $('#btnReaderBookmark').onclick = addBookmark;
+    $('#btnSleep').onclick = () => openDrawer('sleep');
 
-    $('#btnSleep').onclick = () => {
-      const mins = [0, 15, 30, 60];
-      sleepMin = mins[(mins.indexOf(sleepMin) + 1) % mins.length];
-      clearTimeout(sleepTimer);
-      if (sleepMin === 0) {
-        $('#labelSleep').textContent = '定时关闭';
-        $('#btnSleep').classList.remove('active');
-        toast('已取消定时');
-      } else {
-        $('#labelSleep').textContent = `${sleepMin}分钟后`;
-        $('#btnSleep').classList.add('active');
-        sleepTimer = setTimeout(() => {
-          stopPlayback();
-          sleepMin = 0;
-          $('#labelSleep').textContent = '定时关闭';
-          $('#btnSleep').classList.remove('active');
-          toast('定时时间到，已停止播放');
-        }, sleepMin * 60000);
-        toast(`将于 ${sleepMin} 分钟后自动关闭`);
-      }
-    };
-
-    // 阅读器工具栏
     $('#btnOpenToc').onclick = () => openDrawer('toc');
     $('#btnPlayerToc').onclick = () => openDrawer('toc');
     $('#btnOpenBookmarks').onclick = () => openDrawer('bookmarks');
@@ -1522,7 +1652,6 @@
       toast(`正文字号：${fontSize}px`);
     };
 
-    // 抽屉交互
     $('#drawerMask').onclick = () => $('#drawerMask').classList.remove('show');
     document.querySelectorAll('.d-tab').forEach(btn => {
       btn.onclick = () => {
@@ -1533,7 +1662,6 @@
     });
     $('#drawerSearch').oninput = renderDrawerBody;
 
-    // 初始化
     setEngine(edgeConfig.workerUrl && edgeConfig.token ? 'cloud' : 'local');
     renderShelf();
   </script>
