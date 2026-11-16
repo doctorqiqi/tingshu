@@ -1352,48 +1352,38 @@
         }
       }
 
-      // ---- 5. 选定“章”所在的层级（过滤前言/目录/版权等非章条目）----
-      const NON_CHAP_RE = /^(封面|cover|目录|contents?|版权|copyright|书名页|titlepage|扉页|前言|序言|序|后记|附录|index|nav|toc)$/i;
+      // ---- 5. 选定“章”所在的层级（完美对齐微信读书：保留前言/扉页，仅剔除纯目录/版权）----
+      const BLACKLIST_RE = /^(目录|contents?|版权|copyright|书名页|titlepage)$/i;
 
       function isRealChapterLabel(label) {
         const t = String(label || '').replace(/\s+/g, ' ').trim();
         if (!t) return false;
-        if (NON_CHAP_RE.test(t)) return false;
-        if (CH_RE.test(t)) return true;
-        // 没有“第X章”但像章节标题：长度适中、不以句号结尾
-        return t.length <= 40 && !/[。；;，,]$/.test(t);
+        if (BLACKLIST_RE.test(t)) return false;
+        return true; 
       }
 
       if (entries.length) {
-        // 先统计每一层“真正章标题”的数量
-        const cnt = {};
+        // 找到最小层级作为基准层
         let minDepth = Infinity;
-        for (const e of entries) {
-          minDepth = Math.min(minDepth, e.depth);
-          if (CH_RE.test(e.label)) cnt[e.depth] = (cnt[e.depth] || 0) + 1;
-        }
+        for (const e of entries) minDepth = Math.min(minDepth, e.depth);
 
-        let chapDepth = minDepth;
-        let bestCnt = 0;
-        for (const d of Object.keys(cnt).map(Number).sort((a, b) => a - b)) {
-          if (cnt[d] > bestCnt) { bestCnt = cnt[d]; chapDepth = d; }
-        }
-        // 如果没有任何“第X章”，退化为最顶层，但过滤非章条目
-        if (bestCnt === 0) chapDepth = minDepth;
-
-        // 只保留章及更高层级（卷），并过滤非章条目
-        const kept = entries
-          .filter(e => e.depth <= chapDepth)
-          .filter(e => isRealChapterLabel(e.label) || e.depth < chapDepth); // 父级卷保留
-
-        // 同一位置的父级折叠为“所属卷”
+        // 大部分书的目录是平铺的（一级目录），这里保留所有层级，由前端做缩进
+        // 使用去重，处理因为解析问题导致同一个目录项被重复识别
         const dedup = [];
-        for (const e of kept) {
-          const prev = dedup[dedup.length - 1];
-          if (prev && prev.pos === e.pos) {
+        let lastPos = -1;
+        for (const e of entries) {
+          // 过滤废页
+          if (!isRealChapterLabel(e.label)) continue;
+          
+          // 如果位置相同，取最后一个（通常层级更深，信息更全）
+          if (e.pos === lastPos && dedup.length > 0) {
+            const prev = dedup[dedup.length - 1];
             if (prev.depth < e.depth) e.group = prev.group || prev.label;
             dedup[dedup.length - 1] = e;
-          } else dedup.push(e);
+          } else {
+            dedup.push(e);
+            lastPos = e.pos;
+          }
         }
         entries = dedup;
       }
@@ -1419,17 +1409,21 @@
       if (entries.length >= 2) {
         // 目录为准：每个目录项 = 一章；目录外的文件并入前一章
         if (entries[0].pos > 0) {
-          const label = '书前内容';
+          const label = '开始阅读';
           const content = buildContent(label, 0, entries[0].pos);
           if (content.length >= 300) chapters.push({ title: label, content });
         }
+        
         const groups = [];
         entries.forEach((e, i) => {
           groups.length = e.depth + 1;
           groups[e.depth] = e.label;
-          if (SKIP_LABEL_RE.test(e.label)) return;
+          if (SKIP_LABEL_RE.test(e.label)) return; // 再次过滤“封面”
+          
           const end = i + 1 < entries.length ? entries[i + 1].pos : allBlocks.length;
           const content = buildContent(e.label, e.pos, end);
+          
+          // 过滤空白章
           if (content.length > 20) {
             const ch = { title: e.label, content, level: Math.min(e.depth, 3) };
             const g = e.group || (e.depth > 0 ? groups[e.depth - 1] : '');
