@@ -1,3 +1,11 @@
+已针对这两个痛点对 splitSentences（断句逻辑）和 cloudCache（预加载与内存管理）进行了重构优化：
+ * 减少断句与长句智能合并：
+   * 仅在句号（。）、问号（？?）、感叹号（！!）、分号（；;）处断句，不再按逗号强行切碎短句，大幅减少网络请求次数，使语义连贯、语气更自然。
+   * 对于超过 90 字 的长句，按逗号/顿号/冒号切分后再智能合并为约 60 字 的自然片段，避免单次请求过长导致首字延迟或超时。
+ * 后台 3 句并发预合成与无缝衔接：
+   * 播放第 N 句时，后台自动提前请求第 N+1, N+2, N+3 句的音频 Blob 并生成本地播放地址，当前句 onended 触发瞬间直接播放下一句缓存，消除网络等待停顿。
+   * 自动内存回收与缓存重置：已播完的旧句子（< currentSentIdx - 1）自动调用 URL.revokeObjectURL 释放内存；切换章节、语速或云端音色时，自动清空并重新加载缓存。
+请直接替换保存为 index.html：
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -810,7 +818,6 @@
       }
     ];
 
-    // 内置完整的 20+ 官方 Edge TTS 中文神经网络音色列表
     const ALL_EDGE_VOICES = [
       { id: 'zh-CN-YunxiNeural', name: '云希 · 阳光男声 (推荐听书)' },
       { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓 · 温暖女声 (推荐听书)' },
@@ -861,7 +868,6 @@
     let keepAliveTimer = null;
     let keepAliveBusy = false;
     let cloudAudio = document.getElementById('cloudAudio');
-    let cloudObjectUrl = null;
     let cloudReqId = 0;
 
     let sleepMode = 'off';
@@ -888,7 +894,7 @@
     }
 
     // ==========================================
-    // Safari MediaSession 源码适配修复
+    // Safari MediaSession 锁屏控制
     // ==========================================
     function setupMediaSession() {
       if ('mediaSession' in navigator && currentBook) {
@@ -907,12 +913,12 @@
         navigator.mediaSession.setActionHandler('previoustrack', () => { if (currentChapIdx > 0) loadChapter(currentChapIdx - 1, 0, isPlaying); });
         navigator.mediaSession.setActionHandler('nexttrack', () => { if (currentChapIdx < currentBook.chapters.length - 1) loadChapter(currentChapIdx + 1, 0, isPlaying); });
         navigator.mediaSession.setActionHandler('seekbackward', () => {
-          currentSentIdx = Math.max(0, currentSentIdx - 3);
+          currentSentIdx = Math.max(0, currentSentIdx - 2);
           highlightCurrentSentence();
           if (isPlaying) playCurrent();
         });
         navigator.mediaSession.setActionHandler('seekforward', () => {
-          currentSentIdx = Math.min(currentSentences.length - 1, currentSentIdx + 3);
+          currentSentIdx = Math.min(currentSentences.length - 1, currentSentIdx + 2);
           highlightCurrentSentence();
           if (isPlaying) playCurrent();
         });
@@ -925,7 +931,9 @@
       }
     }
 
-    // 朗读文本清洗
+    // ==========================================
+    // 文本清洗与智能断句（仅在句末标点断句，>90字合并为约60字片段）
+    // ==========================================
     function cleanTextForTTS(input) {
       let text = String(input || '').replace(/\r\n?/g, '\n');
       text = text.replace(/```[\w-]*\s*\n?/g, '').replace(/```/g, '');
@@ -948,23 +956,56 @@
 
     function splitSentences(input) {
       const cleaned = cleanTextForTTS(input);
-      const raw = cleaned
-        .replace(/([。！？!?；;，,、：:…]+)\s*/g, '$1\n')
+      // 1. 只在句号、问号、感叹号、分号及换行处断句，保留完整语义
+      const rawSentences = cleaned
+        .replace(/([。！？!?；;]+)\s*/g, '$1\n')
         .split(/\n+/)
         .map(s => s.trim())
         .filter(Boolean);
+
       const result = [];
-      const hardLimit = 120;
-      const target = 100;
-      for (const part of raw) {
-        if (part.length <= hardLimit) {
-          result.push(part);
+      const MAX_SENTENCE_LEN = 90;
+      const TARGET_CHUNK_LEN = 60;
+
+      for (const sentence of rawSentences) {
+        if (sentence.length <= MAX_SENTENCE_LEN) {
+          result.push(sentence);
           continue;
         }
-        for (let i = 0; i < part.length; i += target) {
-          result.push(part.slice(i, i + target).trim());
+
+        // 2. 超过 90 字的长句，按逗号、顿号、冒号切分后再合并成约 60 字的片段
+        const clauses = sentence
+          .replace(/([，,、：:]+)\s*/g, '$1\n')
+          .split(/\n+/)
+          .map(c => c.trim())
+          .filter(Boolean);
+
+        let buffer = '';
+        for (const clause of clauses) {
+          if (clause.length > MAX_SENTENCE_LEN) {
+            // 极端无标点超长句按 60 字硬切
+            if (buffer) {
+              result.push(buffer);
+              buffer = '';
+            }
+            for (let i = 0; i < clause.length; i += TARGET_CHUNK_LEN) {
+              result.push(clause.slice(i, i + TARGET_CHUNK_LEN).trim());
+            }
+            continue;
+          }
+
+          if (!buffer) {
+            buffer = clause;
+          } else if (buffer.length + clause.length <= TARGET_CHUNK_LEN + 15) {
+            buffer += clause;
+          } else {
+            result.push(buffer);
+            buffer = clause;
+          }
         }
+        if (buffer) result.push(buffer);
       }
+
       return result.filter(Boolean);
     }
 
@@ -1016,7 +1057,7 @@
     loadVoices();
 
     // ==========================================
-    // 书架与目录识别优化（支持章下属节）
+    // 书架与目录解析（支持章下属节）
     // ==========================================
     function renderShelf() {
       const grid = $('#bookGrid');
@@ -1341,7 +1382,6 @@
         if (r.length > entries.length) entries = r;
       }
 
-      // 保留所有章节及下属节，并自动推导所属章（group）与缩进层级（level）
       let minDepth = entries.length ? Math.min(...entries.map(e => e.depth)) : 0;
       let currentParentTitle = '';
       let chapters = [];
@@ -1468,7 +1508,8 @@
 
     function loadChapter(chapIdx, sentIdx = 0, autoPlay = false) {
       if (!currentBook) return;
-      pruneCloudCache(true);
+      // 切换章节时彻底清理缓存
+      resetCloudCache();
       currentChapIdx = Math.max(0, Math.min(chapIdx, currentBook.chapters.length - 1));
       const chap = currentBook.chapters[currentChapIdx];
       currentSentences = splitSentences(chap.content);
@@ -1531,10 +1572,96 @@
       const total = currentSentences.length || 1;
       const pct = Math.round(((currentSentIdx + 1) / total) * 100);
       $('#scrubFill').style.width = `${pct}%`;
-      const curSec = Math.floor((currentSentIdx * 4) / rate);
-      const totSec = Math.floor((total * 4) / rate);
+      const curSec = Math.floor((currentSentIdx * 5) / rate);
+      const totSec = Math.floor((total * 5) / rate);
       const fmt = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
       $('#timePill').textContent = `${fmt(curSec)} / ${fmt(totSec)}`;
+    }
+
+    // ==========================================
+    // 云端预合成缓存池（提前 3 句请求 + 自动释放内存）
+    // ==========================================
+    const cloudCache = new Map();
+    const PREFETCH_AHEAD = 3;
+
+    function getCacheKey(chapIdx, sentIdx) {
+      return `${chapIdx}|${sentIdx}|${edgeConfig.voice}|${rate}`;
+    }
+
+    function resetCloudCache() {
+      for (const [, entry] of cloudCache) {
+        if (entry.objUrl) {
+          URL.revokeObjectURL(entry.objUrl);
+        } else if (entry.promise) {
+          entry.promise.then(url => URL.revokeObjectURL(url)).catch(() => {});
+        }
+      }
+      cloudCache.clear();
+    }
+
+    function cleanupPlayedAudio() {
+      for (const [key, entry] of cloudCache) {
+        // 清理非当前章或已播过的旧句子（保留当前句和前1句防回退）
+        if (entry.chapIdx !== currentChapIdx || entry.sentIdx < currentSentIdx - 1) {
+          if (entry.objUrl) {
+            URL.revokeObjectURL(entry.objUrl);
+          } else if (entry.promise) {
+            entry.promise.then(url => URL.revokeObjectURL(url)).catch(() => {});
+          }
+          cloudCache.delete(key);
+        }
+      }
+    }
+
+    function fetchSentenceAudio(chapIdx, sentIdx) {
+      const key = getCacheKey(chapIdx, sentIdx);
+      const existing = cloudCache.get(key);
+      if (existing) return existing.promise;
+
+      const text = currentSentences[sentIdx];
+      if (!text) return Promise.reject(new Error('空句子'));
+
+      const entry = { chapIdx, sentIdx, objUrl: null, promise: null };
+      entry.promise = fetch(`${edgeConfig.workerUrl.replace(/\/$/, '')}/v1/audio/speech`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${edgeConfig.token}`
+        },
+        body: JSON.stringify({
+          model: 'tts-1',
+          input: text,
+          voice: edgeConfig.voice || 'zh-CN-YunxiNeural',
+          speed: rate,
+          response_format: 'mp3'
+        })
+      })
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.blob();
+        })
+        .then(blob => {
+          const url = URL.createObjectURL(blob);
+          entry.objUrl = url;
+          return url;
+        })
+        .catch(err => {
+          cloudCache.delete(key);
+          throw err;
+        });
+
+      cloudCache.set(key, entry);
+      return entry.promise;
+    }
+
+    function triggerPrefetch() {
+      if (engine !== 'cloud' || !edgeConfig.workerUrl || !edgeConfig.token) return;
+      for (let offset = 1; offset <= PREFETCH_AHEAD; offset++) {
+        const targetIdx = currentSentIdx + offset;
+        if (targetIdx < currentSentences.length) {
+          fetchSentenceAudio(currentChapIdx, targetIdx).catch(() => {});
+        }
+      }
     }
 
     // ==========================================
@@ -1545,10 +1672,6 @@
       cloudReqId++;
       speechSynthesis.cancel();
       cloudAudio.pause();
-      if (cloudObjectUrl) {
-        URL.revokeObjectURL(cloudObjectUrl);
-        cloudObjectUrl = null;
-      }
       isPlaying = false;
       updatePlayButtons();
       updateMediaSessionState();
@@ -1610,56 +1733,6 @@
       startKeepAlive();
     }
 
-    const cloudCache = new Map();
-    const PREFETCH_AHEAD = 3;
-
-    function cloudKey(idx) {
-      return `${currentChapIdx}|${idx}|${edgeConfig.voice}|${rate}`;
-    }
-
-    function getCloudAudio(idx) {
-      const key = cloudKey(idx);
-      const hit = cloudCache.get(key);
-      if (hit) return hit.p;
-      const text = currentSentences[idx];
-      const p = fetch(`${edgeConfig.workerUrl.replace(/\/$/, '')}/v1/audio/speech`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${edgeConfig.token}`
-        },
-        body: JSON.stringify({
-          model: 'tts-1',
-          input: text,
-          voice: edgeConfig.voice || 'zh-CN-YunxiNeural',
-          speed: rate,
-          response_format: 'mp3'
-        })
-      }).then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.blob();
-      }).then(blob => URL.createObjectURL(blob));
-      p.catch(() => cloudCache.delete(key));
-      cloudCache.set(key, { chap: currentChapIdx, idx, p });
-      return p;
-    }
-
-    function prefetchCloud() {
-      for (let i = 1; i <= PREFETCH_AHEAD; i++) {
-        const idx = currentSentIdx + i;
-        if (idx < currentSentences.length) getCloudAudio(idx).catch(() => {});
-      }
-    }
-
-    function pruneCloudCache(all = false) {
-      for (const [key, v] of cloudCache) {
-        if (all || v.chap !== currentChapIdx || v.idx < currentSentIdx - 1) {
-          v.p.then(u => URL.revokeObjectURL(u)).catch(() => {});
-          cloudCache.delete(key);
-        }
-      }
-    }
-
     async function playCloudSentence(text) {
       stopKeepAlive();
       const reqId = ++cloudReqId;
@@ -1669,13 +1742,20 @@
         playLocalSentence(text);
         return;
       }
+
       try {
-        const myIdx = currentSentIdx;
-        const urlPromise = getCloudAudio(myIdx);
-        prefetchCloud();
-        const objUrl = await urlPromise;
-        if (reqId !== cloudReqId) return;
-        pruneCloudCache();
+        // 1. 立即清理已播过的旧音频内存
+        cleanupPlayedAudio();
+
+        // 2. 获取当前句音频（若已预加载则零等待直接命中缓存）
+        const currentAudioPromise = fetchSentenceAudio(currentChapIdx, currentSentIdx);
+
+        // 3. 后台并发预请求后面 3 句的音频
+        triggerPrefetch();
+
+        const objUrl = await currentAudioPromise;
+        if (reqId !== cloudReqId || !isPlaying) return;
+
         cloudAudio.src = objUrl;
         cloudAudio.onended = () => {
           if (isPlaying && reqId === cloudReqId) {
@@ -1778,7 +1858,7 @@
     }
 
     // ==========================================
-    // 抽屉控制（内置全部 20+ 音色与层级目录）
+    // 抽屉控制
     // ==========================================
     let activeDrawerTab = 'toc';
 
@@ -1867,15 +1947,21 @@
         });
 
         $('#btnSaveCfg').onclick = () => {
+          const oldVoice = edgeConfig.voice;
           edgeConfig = {
             workerUrl: $('#cfgUrl').value.trim(),
             token: $('#cfgToken').value.trim(),
             voice: $('#cfgVoice').value
           };
           localStorage.setItem('tingshu_edge_worker_tts', JSON.stringify(edgeConfig));
+          // 切换音色时重置缓存
+          if (oldVoice !== edgeConfig.voice) {
+            resetCloudCache();
+          }
           setEngine(edgeConfig.workerUrl && edgeConfig.token ? 'cloud' : 'local');
           $('#drawerMask').classList.remove('show');
           toast('云端语音设置已保存');
+          if (isPlaying) playCurrent();
         };
         return;
       }
@@ -1947,8 +2033,8 @@
     $('#btnMainPlay').onclick = togglePlay;
     $('#btnPrevChap').onclick = () => { if (currentChapIdx > 0) loadChapter(currentChapIdx - 1, 0, isPlaying); else toast('已是第一章'); };
     $('#btnNextChap').onclick = () => { if (currentChapIdx < currentBook.chapters.length - 1) loadChapter(currentChapIdx + 1, 0, isPlaying); else toast('已是最后一章'); };
-    $('#btnSkipBack').onclick = () => { currentSentIdx = Math.max(0, currentSentIdx - 3); highlightCurrentSentence(); if (isPlaying) playCurrent(); };
-    $('#btnSkipFwd').onclick = () => { currentSentIdx = Math.min(currentSentences.length - 1, currentSentIdx + 3); highlightCurrentSentence(); if (isPlaying) playCurrent(); };
+    $('#btnSkipBack').onclick = () => { currentSentIdx = Math.max(0, currentSentIdx - 2); highlightCurrentSentence(); if (isPlaying) playCurrent(); };
+    $('#btnSkipFwd').onclick = () => { currentSentIdx = Math.min(currentSentences.length - 1, currentSentIdx + 2); highlightCurrentSentence(); if (isPlaying) playCurrent(); };
 
     $('#scrubWrap').onclick = (e) => {
       if (!currentSentences.length) return;
@@ -1966,6 +2052,8 @@
       const rates = [1.0, 1.2, 1.5, 1.8, 2.0, 0.8];
       rate = rates[(rates.indexOf(rate) + 1) % rates.length];
       $('#labelRate').textContent = `语速 ${rate.toFixed(1)}x`;
+      // 切换语速时重置预加载缓存
+      resetCloudCache();
       if (isPlaying) playCurrent();
     };
     $('#btnVoiceCycle').onclick = () => openDrawer('settings');
@@ -2005,3 +2093,4 @@
   </script>
 </body>
 </html>
+
