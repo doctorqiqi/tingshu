@@ -533,7 +533,7 @@
       overflow: hidden;
       animation: slideUp 0.25s ease-out;
     }
-    .drawer-sheet.compact { height: auto; max-height: 60%; }
+    .drawer-sheet.compact { height: auto; max-height: 70%; }
     @keyframes slideUp {
       from { transform: translateY(100%); }
       to { transform: translateY(0); }
@@ -797,18 +797,49 @@
         chapters: [
           {
             title: '第一章 “低智商社会”的出现',
-            content: '混乱，最后只是按政府的意愿来行事。如果我们回顾一下一次次被揭发的“食品造假问题”，就可以很清楚地了解这一点。\n这些年来，种种“食品造假问题”层出不穷，多得让人厌烦。\n现在，政府对企业的监管力度正在加强。除此之外，消费者、经营者、市场、规则制定者等各个方面的监管力度都在加强。一旦出现什么问题，就会在网络上被大写特写。'
+            content: '混乱，最后只是按政府的意愿来行事。如果我们回顾一下一次次被揭发的“食品造假问题”，就可以很清楚地了解这一点。\n这些年来，种种“食品造假问题”层出不穷，多得让人厌烦。\n现在，政府对企业的监管力度正在加强。除此之外，消费者、经营者、市场、规则制定者等各个方面的监管力度都在加强。一旦出现什么问题，就会在网络上被大写特写。',
+            level: 0
           },
           {
-            title: '第二章 经济萧条的根源是“智商衰退”',
-            content: '有些糟糕的新闻记者就专门在网络上寻找素材，在这里如果发现了关于某家企业的一些负面问题，他们就会立马进行取材，写出相关报道。\n由此一来，政治家和官员马上就会站出来说“这是个大问题！”因此，针对企业的监管就一步步地被加强了。我想那些食品造假问题也就是这样成为人们茶余饭后的谈资的吧。'
-          },
-          {
-            title: '第三章 为数一亿的“经济文盲”',
-            content: '最典型的例子就是由中国生产的冷冻饺子引发的食物中毒事件。\n之前一直说要加强对消费者保护立法的福田政权以这件事为契机，立刻设立了“消费者厅”，之后又对消费者厅设置法案进行了审议。\n他这样做不仅赢得了民众的支持，而且通过强化监管的手段，使一直以来造假猖獗的食品界更加规范化。'
+            title: '满是“笨蛋现象”的现代日本社会',
+            content: '有些糟糕的新闻记者就专门在网络上寻找素材，在这里如果发现了关于某家企业的一些负面问题，他们就会立马进行取材，写出相关报道。\n由此一来，政治家和官员马上就会站出来说“这是个大问题！”因此，针对企业的监管就一步步地被加强了。我想那些食品造假问题也就是这样成为人们茶余饭后的谈资的吧。',
+            level: 1,
+            group: '第一章 “低智商社会”的出现'
           }
         ]
       }
+    ];
+
+    // 内置完整的 20+ 官方 Edge TTS 中文神经网络音色列表
+    const ALL_EDGE_VOICES = [
+      { id: 'zh-CN-YunxiNeural', name: '云希 · 阳光男声 (推荐听书)' },
+      { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓 · 温暖女声 (推荐听书)' },
+      { id: 'zh-CN-XiaoyiNeural', name: '晓伊 · 甜美女声' },
+      { id: 'zh-CN-YunyangNeural', name: '云扬 · 新闻男声' },
+      { id: 'zh-CN-YunjianNeural', name: '云健 · 激昂男声 (体育/解说)' },
+      { id: 'zh-CN-XiaochenNeural', name: '晓辰 · 稳重女声' },
+      { id: 'zh-CN-XiaohanNeural', name: '晓涵 · 情感女声' },
+      { id: 'zh-CN-XiaomengNeural', name: '晓梦 · 柔和女声' },
+      { id: 'zh-CN-XiaomoNeural', name: '晓墨 · 叙事女声' },
+      { id: 'zh-CN-XiaoqiuNeural', name: '晓秋 · 自然女声' },
+      { id: 'zh-CN-XiaoruiNeural', name: '晓睿 · 温柔女声' },
+      { id: 'zh-CN-XiaoshuangNeural', name: '晓双 · 童声女' },
+      { id: 'zh-CN-XiaoxuanNeural', name: '晓萱 · 活泼女声' },
+      { id: 'zh-CN-XiaoyanNeural', name: '晓颜 · 温柔女声' },
+      { id: 'zh-CN-XiaozhenNeural', name: '晓甄 · 磁性女声' },
+      { id: 'zh-CN-YunfengNeural', name: '云枫 · 沉稳男声' },
+      { id: 'zh-CN-YunhaoNeural', name: '云皓 · 深沉男声' },
+      { id: 'zh-CN-YunjieNeural', name: '云杰 · 磁性男声' },
+      { id: 'zh-CN-YunxiaNeural', name: '云夏 · 活力男声' },
+      { id: 'zh-CN-YunyeNeural', name: '云野 · 磁性男声' },
+      { id: 'zh-CN-YunzeNeural', name: '云泽 · 播音男声' },
+      { id: 'zh-CN-liaoning-XiaobeiNeural', name: '晓北 · 东北话女声' },
+      { id: 'zh-CN-shaanxi-XiaoniNeural', name: '晓妮 · 陕西话女声' },
+      { id: 'zh-CN-sichuan-YuxiNeural', name: '玉希 · 四川话男声' },
+      { id: 'zh-HK-HiuMaanNeural', name: '晓蔓 · 粤语女声' },
+      { id: 'zh-HK-WanLungNeural', name: '云龙 · 粤语男声' },
+      { id: 'zh-TW-HsiaoChenNeural', name: '晓臻 · 台湾国语女声' },
+      { id: 'zh-TW-YunJheNeural', name: '云哲 · 台湾国语男声' }
     ];
 
     let books = JSON.parse(localStorage.getItem('weread_books') || 'null') || SAMPLE_BOOKS;
@@ -871,18 +902,10 @@
           ]
         });
 
-        navigator.mediaSession.setActionHandler('play', () => {
-          if (!isPlaying) playCurrent();
-        });
-        navigator.mediaSession.setActionHandler('pause', () => {
-          if (isPlaying) stopPlayback();
-        });
-        navigator.mediaSession.setActionHandler('previoustrack', () => {
-          if (currentChapIdx > 0) loadChapter(currentChapIdx - 1, 0, isPlaying);
-        });
-        navigator.mediaSession.setActionHandler('nexttrack', () => {
-          if (currentChapIdx < currentBook.chapters.length - 1) loadChapter(currentChapIdx + 1, 0, isPlaying);
-        });
+        navigator.mediaSession.setActionHandler('play', () => { if (!isPlaying) playCurrent(); });
+        navigator.mediaSession.setActionHandler('pause', () => { if (isPlaying) stopPlayback(); });
+        navigator.mediaSession.setActionHandler('previoustrack', () => { if (currentChapIdx > 0) loadChapter(currentChapIdx - 1, 0, isPlaying); });
+        navigator.mediaSession.setActionHandler('nexttrack', () => { if (currentChapIdx < currentBook.chapters.length - 1) loadChapter(currentChapIdx + 1, 0, isPlaying); });
         navigator.mediaSession.setActionHandler('seekbackward', () => {
           currentSentIdx = Math.max(0, currentSentIdx - 3);
           highlightCurrentSentence();
@@ -925,34 +948,22 @@
 
     function splitSentences(input) {
       const cleaned = cleanTextForTTS(input);
-      // 只在句末标点处断句，减少请求次数与停顿；过长句再按逗号合并切分
       const raw = cleaned
-        .replace(/([。！？!?；;]+)\s*/g, '$1\n')
+        .replace(/([。！？!?；;，,、：:…]+)\s*/g, '$1\n')
         .split(/\n+/)
         .map(s => s.trim())
         .filter(Boolean);
       const result = [];
-      const softLimit = 90;
-      const target = 60;
+      const hardLimit = 120;
+      const target = 100;
       for (const part of raw) {
-        if (part.length <= softLimit) {
+        if (part.length <= hardLimit) {
           result.push(part);
           continue;
         }
-        const pieces = part.replace(/([，,、：:]+)\s*/g, '$1\n').split(/\n+/).filter(Boolean);
-        let buf = '';
-        for (const p of pieces) {
-          if (buf && (buf + p).length > target) {
-            result.push(buf.trim());
-            buf = '';
-          }
-          buf += p;
-          while (buf.length > softLimit) {
-            result.push(buf.slice(0, softLimit).trim());
-            buf = buf.slice(softLimit);
-          }
+        for (let i = 0; i < part.length; i += target) {
+          result.push(part.slice(i, i + target).trim());
         }
-        if (buf.trim()) result.push(buf.trim());
       }
       return result.filter(Boolean);
     }
@@ -1005,7 +1016,7 @@
     loadVoices();
 
     // ==========================================
-    // 目录解析
+    // 书架与目录识别优化（支持章下属节）
     // ==========================================
     function renderShelf() {
       const grid = $('#bookGrid');
@@ -1037,25 +1048,33 @@
       });
     }
 
-    // ---------- 章节标题识别（TXT / EPUB 兜底共用） ----------
     const CN_NUM = '[零〇一二三四五六七八九十百千万两0-9０-９]+';
     const CHAP_TITLE_RE = new RegExp(
       '^\\s*(?:' +
         '第\\s*' + CN_NUM + '\\s*(?:[章回卷集部篇幕]|节(?=$|[\\s:：、.．—\\-]))' +
         '|卷\\s*' + CN_NUM + '(?=$|[\\s:：、.．—\\-])' +
         '|(?:chapter|CHAPTER|Chapter)\\s*(?:[0-9]+|[IVXLCivxlc]+)(?![A-Za-z])' +
-        '|(?:序言|序章|序|前言|后记|引子|楔子|尾声|终章|结语)(?:$|[\\s:：、.．—\\-])' +
-        '|番外' +
+        '|(?:序言|序章|序|前言|后记|引子|楔子|尾声|终章|结语)(?:$|[\\s:：、.．—\\-]))'
+    );
+    const SEC_TITLE_RE = new RegExp(
+      '^\\s*(?:' +
+        '节\\s*' + CN_NUM +
+        '|[一二三四五六七八九十]+[、.．]' +
+        '|[0-9]+[.．][0-9]*\\s*\\S+' +
       ')'
     );
+
     function isChapterTitleLine(line) {
       const t = String(line || '').trim();
       return t.length > 0 && t.length <= 40 && !/[。；;，,]$/.test(t) && CHAP_TITLE_RE.test(t);
     }
+    function isSectionTitleLine(line) {
+      const t = String(line || '').trim();
+      return t.length > 0 && t.length <= 40 && !/[。；;，,]$/.test(t) && (SEC_TITLE_RE.test(t) || /^一[、.]/.test(t));
+    }
     const SKIP_LABEL_RE = /^(封面|cover)$/i;
     const normLabel = s => String(s || '').replace(/\s+/g, '').toLowerCase();
 
-    // 自动识别 UTF-8 / GBK(GB18030) 编码，避免中文 TXT 乱码导致目录识别失败
     async function readTextAuto(file) {
       const buf = await file.arrayBuffer();
       try {
@@ -1070,15 +1089,30 @@
       const lines = rawText.replace(/\r\n?/g, '\n').split('\n');
       const chapters = [];
       let curTitle = '开始阅读';
+      let curLevel = 0;
+      let curGroup = '';
       let curBuf = [];
+
       const flush = () => {
         const content = curBuf.join('\n').trim();
-        if (content.length >= 15) chapters.push({ title: curTitle, content });
+        if (content.length >= 10) {
+          chapters.push({ title: curTitle, content, level: curLevel, group: curGroup });
+        }
       };
+
       for (const line of lines) {
-        if (isChapterTitleLine(line)) {
+        const trimmed = line.trim();
+        if (isChapterTitleLine(trimmed)) {
           flush();
-          curTitle = line.trim();
+          curTitle = trimmed;
+          curLevel = 0;
+          curGroup = '';
+          curBuf = [];
+        } else if (isSectionTitleLine(trimmed)) {
+          flush();
+          curTitle = trimmed;
+          curLevel = 1;
+          curGroup = chapters.length ? chapters[chapters.length - 1].title : '';
           curBuf = [];
         } else {
           curBuf.push(line);
@@ -1092,19 +1126,19 @@
         let len = 0;
         const pushAuto = () => {
           const content = buf.join('\n').trim();
-          if (content) auto.push({ title: `第 ${auto.length + 1} 节`, content });
+          if (content) auto.push({ title: `第 ${auto.length + 1} 节`, content, level: 0 });
           buf = [];
           len = 0;
         };
         for (const line of lines) {
           buf.push(line);
           len += line.length + 1;
-          if (len >= 3000) pushAuto(); // 按行（段落）边界切分，不再从句中间截断
+          if (len >= 3000) pushAuto();
         }
         pushAuto();
         return auto;
       }
-      return chapters.length ? chapters : [{ title: bookTitle, content: rawText.trim() }];
+      return chapters.length ? chapters : [{ title: bookTitle, content: rawText.trim(), level: 0 }];
     }
 
     function normalizePath(baseDir, relPath) {
@@ -1118,12 +1152,11 @@
       return stack.join('/');
     }
 
-    // ---------- EPUB：把章节文件拆成「段落块」，并记录每块内的锚点 id ----------
     function parseMarkup(str) {
       const parser = new DOMParser();
       let doc = parser.parseFromString(str, 'application/xhtml+xml');
       if (doc.getElementsByTagName('parsererror').length || !doc.body) {
-        doc = parser.parseFromString(str, 'text/html'); // 不规范的 XHTML 降级解析
+        doc = parser.parseFromString(str, 'text/html');
       }
       return doc;
     }
@@ -1191,13 +1224,11 @@
         if (media === 'application/x-dtbncx+xml') ncxHref = fullHref;
         if (props.split(/\s+/).includes('nav')) navHref = fullHref;
       });
-      // EPUB2 的 NCX 可能只在 spine[toc] 中声明
       if (!ncxHref) {
         const tocId = opfDoc.querySelector('spine')?.getAttribute('toc');
         if (tocId && manifest[tocId]) ncxHref = manifest[tocId].href;
       }
 
-      // ---- 1. 读取目录（保留 #锚点，同一文件内的多个章节不再互相覆盖）----
       const pushToc = (list, dir, label, src, depth = 0) => {
         if (!label || !src) return;
         const [p, f] = src.split('#');
@@ -1233,7 +1264,6 @@
         const navDoc = parseMarkup(await zip.file(navHref).async('string'));
         const navDir = navHref.includes('/') ? navHref.slice(0, navHref.lastIndexOf('/')) : '';
         const navs = Array.from(navDoc.querySelectorAll('nav'));
-        // 只取 epub:type="toc"，避免把 landmarks / page-list 当目录
         const tocNav = navs.find(n => Array.from(n.attributes).some(a => /type$/.test(a.name) && /\btoc\b/.test(a.value))) || navs[0];
         const list = [];
         const walkOl = (ol, depth) => {
@@ -1249,7 +1279,6 @@
         tocLists.push(list);
       }
 
-      // ---- 2. 按 spine 顺序拆成段落块 ----
       const tocHrefSet = new Set();
       tocLists.forEach(l => l.forEach(t => tocHrefSet.add(t.href)));
       const guideTocRef = opfDoc.querySelector('guide > reference[type="toc"]');
@@ -1279,7 +1308,6 @@
         allBlocks.push(...f.blocks);
       }
 
-      // ---- 3. 把目录项定位到全书的段落位置 ----
       const resolveToc = (list) => {
         const entries = [];
         for (const t of list) {
@@ -1313,34 +1341,10 @@
         if (r.length > entries.length) entries = r;
       }
 
-      // ---- 选定“章”所在的层级（仿微信读书：目录里的一级项 = 章，小节不拆章）----
-      // 若某一层大量出现“第X章/Chapter N”，以该层为章（卷 > 章 的书会落在第二层）；否则取最顶层
-      let chapDepth = 0;
-      if (entries.length) {
-        const CH_RE = /^\s*(第\s*[零〇一二三四五六七八九十百千万两0-9０-９]+\s*[章回]|chapter\s*[0-9IVXLC]+)/i;
-        const cnt = {};
-        let minDepth = Infinity;
-        for (const e of entries) {
-          minDepth = Math.min(minDepth, e.depth);
-          if (CH_RE.test(e.label)) cnt[e.depth] = (cnt[e.depth] || 0) + 1;
-        }
-        chapDepth = minDepth;
-        let bestCnt = 1;
-        for (const d of Object.keys(cnt).map(Number).sort((a, b) => a - b)) {
-          if (cnt[d] > bestCnt) { bestCnt = cnt[d]; chapDepth = d; }
-        }
-        // 只保留章及更高层级（卷）；同一位置的父级折叠为“所属卷”
-        const kept = entries.filter(e => e.depth <= chapDepth);
-        const dedup = [];
-        for (const e of kept) {
-          const prev = dedup[dedup.length - 1];
-          if (prev && prev.pos === e.pos) {
-            if (prev.depth < e.depth) e.group = prev.group || prev.label;
-            dedup[dedup.length - 1] = e;
-          } else dedup.push(e);
-        }
-        entries = dedup;
-      }
+      // 保留所有章节及下属节，并自动推导所属章（group）与缩进层级（level）
+      let minDepth = entries.length ? Math.min(...entries.map(e => e.depth)) : 0;
+      let currentParentTitle = '';
+      let chapters = [];
 
       const buildContent = (label, from, to) => {
         const texts = [];
@@ -1349,37 +1353,35 @@
           const t = allBlocks[i].text;
           if (t && normLabel(t) !== bt) texts.push(t);
         }
-        // 去掉正文开头与章节标题重复的标题行（含被拆成两行的情况）
         if (texts.length && normLabel(texts[0]) === normLabel(label)) texts.shift();
         else if (texts.length > 1 && normLabel(texts[0] + texts[1]) === normLabel(label)) texts.splice(0, 2);
         return texts.join('\n');
       };
 
-      let chapters = [];
-
       if (entries.length >= 2) {
-        // 目录为准：每个目录项 = 一章；目录外的文件并入前一章
         if (entries[0].pos > 0) {
           const label = '书前内容';
           const content = buildContent(label, 0, entries[0].pos);
-          if (content.length >= 300) chapters.push({ title: label, content });
+          if (content.length >= 300) chapters.push({ title: label, content, level: 0, group: '' });
         }
-        const groups = [];
         entries.forEach((e, i) => {
-          groups.length = e.depth + 1;
-          groups[e.depth] = e.label;
           if (SKIP_LABEL_RE.test(e.label)) return;
+          const level = Math.max(0, e.depth - minDepth);
+          if (level === 0) {
+            currentParentTitle = e.label;
+          }
           const end = i + 1 < entries.length ? entries[i + 1].pos : allBlocks.length;
           const content = buildContent(e.label, e.pos, end);
-          if (content.length > 20) {
-            const ch = { title: e.label, content, level: Math.min(e.depth, 3) };
-            const g = e.group || (e.depth > 0 ? groups[e.depth - 1] : '');
-            if (g) ch.group = g;
-            chapters.push(ch);
+          if (content.length > 20 || level === 0) {
+            chapters.push({
+              title: e.label,
+              content: content || '（本节内容较少）',
+              level: Math.min(level, 2),
+              group: level > 0 ? currentParentTitle : ''
+            });
           }
         });
       } else {
-        // 没有可用目录：按文件 + 标题启发式识别，无标题的文件并入上一章
         for (const f of files) {
           const texts = f.blocks.map(b => b.text).filter(Boolean);
           if (!texts.length) continue;
@@ -1391,14 +1393,13 @@
           if (title && normLabel(body[0]) === normLabel(title)) body = body.slice(1);
           const content = body.join('\n');
           if (title) {
-            if (content.length > 20) chapters.push({ title, content });
+            if (content.length > 20) chapters.push({ title, content, level: 0, group: '' });
           } else if (chapters.length) {
             chapters[chapters.length - 1].content += '\n' + content;
           } else if (content.length > 20) {
-            chapters.push({ title: '开始阅读', content });
+            chapters.push({ title: '开始阅读', content, level: 0, group: '' });
           }
         }
-        // 整本书只识别出 1~2 章：把全文当 TXT 再按“第X章”等规则识别一次
         if (chapters.length <= 2) {
           const all = chapters.map(c => c.content).join('\n');
           if (all.length > 8000) {
@@ -1422,7 +1423,7 @@
     $('#fileInput').onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      toast('正在解析书籍目录...');
+      toast('正在解析书籍目录与小节...');
       try {
         let newBook;
         if (file.name.toLowerCase().endsWith('.epub')) {
@@ -1441,7 +1442,7 @@
         books.unshift(newBook);
         saveAll();
         renderShelf();
-        toast(`导入成功，共解析 ${newBook.chapters.length} 章`);
+        toast(`导入成功，共解析 ${newBook.chapters.length} 个章节和小节`);
       } catch (err) {
         toast('导入失败: ' + err.message);
       }
@@ -1500,7 +1501,7 @@
       $('#playerBookTitle').textContent = currentBook.title;
       $('#playerBookAuthor').textContent = currentBook.author || '本地电子书';
       $('#playerChapTitle').textContent = chap.title;
-      $('#labelChapCount').textContent = `${currentChapIdx + 1}/${currentBook.chapters.length}章`;
+      $('#labelChapCount').textContent = `${currentChapIdx + 1}/${currentBook.chapters.length}节`;
       updatePlayerSubtitle();
 
       setupMediaSession();
@@ -1609,8 +1610,7 @@
       startKeepAlive();
     }
 
-    // ---- 云端音频预取缓存：提前合成后续句子，句间无需等待网络 ----
-    const cloudCache = new Map(); // key -> { chap, idx, p: Promise<objectUrl> }
+    const cloudCache = new Map();
     const PREFETCH_AHEAD = 3;
 
     function cloudKey(idx) {
@@ -1701,9 +1701,9 @@
       engine = mode;
       $('#pillEngineLocal').classList.toggle('active', mode === 'local');
       $('#pillEngineCloud').classList.toggle('active', mode === 'cloud');
-      $('#labelVoice').textContent = mode === 'cloud'
-        ? (edgeConfig.voice?.split('-').pop().replace('Neural', '') || '云端音色')
-        : (selectedVoice ? selectedVoice.name.slice(0, 6) : '系统音色');
+      const found = ALL_EDGE_VOICES.find(v => v.id === edgeConfig.voice);
+      const shortName = found ? found.name.split('·')[0].trim() : (edgeConfig.voice ? edgeConfig.voice.split('-').pop().replace('Neural', '') : '云端音色');
+      $('#labelVoice').textContent = mode === 'cloud' ? shortName : (selectedVoice ? selectedVoice.name.slice(0, 6) : '系统音色');
     }
 
     // ==========================================
@@ -1778,7 +1778,7 @@
     }
 
     // ==========================================
-    // 抽屉控制
+    // 抽屉控制（内置全部 20+ 音色与层级目录）
     // ==========================================
     let activeDrawerTab = 'toc';
 
@@ -1793,7 +1793,7 @@
       $('#drawerMask').classList.add('show');
     }
 
-    function renderDrawerBody() {
+    async function renderDrawerBody() {
       const box = $('#drawerContent');
       const kw = $('#drawerSearch').value.trim().toLowerCase();
       box.innerHTML = '';
@@ -1838,7 +1838,7 @@
 
       if (activeDrawerTab === 'settings') {
         box.innerHTML = `
-          <h3 style="margin:10px 0 16px;font-size:17px;">云端 Edge TTS 与语音设置</h3>
+          <h3 style="margin:10px 0 14px;font-size:17px;">云端 Edge TTS 与语音设置</h3>
           <div class="form-group">
             <label>Cloudflare Worker 地址</label>
             <input class="form-input" id="cfgUrl" value="${edgeConfig.workerUrl || ''}" placeholder="https://xxx.workers.dev" />
@@ -1848,17 +1848,24 @@
             <input class="form-input" id="cfgToken" type="password" value="${edgeConfig.token || ''}" placeholder="填写环境变量 API_KEY" />
           </div>
           <div class="form-group">
-            <label>云端中文神经网络音色</label>
-            <select class="form-select" id="cfgVoice">
-              <option value="zh-CN-YunxiNeural" ${edgeConfig.voice === 'zh-CN-YunxiNeural' ? 'selected' : ''}>云希 · 阳光男声 (推荐听书)</option>
-              <option value="zh-CN-XiaoxiaoNeural" ${edgeConfig.voice === 'zh-CN-XiaoxiaoNeural' ? 'selected' : ''}>晓晓 · 温暖女声</option>
-              <option value="zh-CN-XiaoyiNeural" ${edgeConfig.voice === 'zh-CN-XiaoyiNeural' ? 'selected' : ''}>晓伊 · 甜美女声</option>
-              <option value="zh-CN-YunyangNeural" ${edgeConfig.voice === 'zh-CN-YunyangNeural' ? 'selected' : ''}>云扬 · 新闻男声</option>
-              <option value="zh-CN-YunjianNeural" ${edgeConfig.voice === 'zh-CN-YunjianNeural' ? 'selected' : ''}>云健 · 激昂男声</option>
-            </select>
+            <label>云端神经网络音色（内置全部 20+ 款热门音色）</label>
+            <select class="form-select" id="cfgVoice"></select>
           </div>
           <button class="save-btn" id="btnSaveCfg">保存云端配置并启用</button>
         `;
+
+        const sel = $('#cfgVoice');
+        sel.innerHTML = '';
+        ALL_EDGE_VOICES.forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v.id;
+          opt.textContent = v.name;
+          if (v.id === (edgeConfig.voice || 'zh-CN-YunxiNeural')) {
+            opt.selected = true;
+          }
+          sel.appendChild(opt);
+        });
+
         $('#btnSaveCfg').onclick = () => {
           edgeConfig = {
             workerUrl: $('#cfgUrl').value.trim(),
@@ -1880,9 +1887,10 @@
           if (kw && !c.title.toLowerCase().includes(kw)) return;
           const row = document.createElement('div');
           row.className = 'list-row' + (idx === currentChapIdx ? ' active' : '');
+          const indent = (c.level || 0) * 16;
           row.innerHTML = `
-            <div style="padding-left:${(c.level || 0) * 14}px">
-              <div class="list-row-title">${c.title}</div>
+            <div style="padding-left: ${indent}px; flex:1;">
+              <div class="list-row-title" style="${c.level > 0 ? 'font-size:14px; color:var(--text2);' : ''}">${c.title}</div>
               <div class="list-row-sub">${c.group ? c.group + ' · ' : ''}约 ${c.content.length} 字</div>
             </div>
             <span style="font-size:12px;color:var(--text3)">${idx === currentChapIdx ? '当前' : ''}</span>
