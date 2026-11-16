@@ -533,7 +533,7 @@
       overflow: hidden;
       animation: slideUp 0.25s ease-out;
     }
-    .drawer-sheet.compact { height: auto; max-height: 65%; }
+    .drawer-sheet.compact { height: auto; max-height: 70%; }
     @keyframes slideUp {
       from { transform: translateY(100%); }
       to { transform: translateY(0); }
@@ -811,6 +811,38 @@
       }
     ];
 
+    // 内置完整的 20+ 官方 Edge TTS 中文神经网络音色列表
+    const ALL_EDGE_VOICES = [
+      { id: 'zh-CN-YunxiNeural', name: '云希 · 阳光男声 (推荐听书)' },
+      { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓 · 温暖女声 (推荐听书)' },
+      { id: 'zh-CN-XiaoyiNeural', name: '晓伊 · 甜美女声' },
+      { id: 'zh-CN-YunyangNeural', name: '云扬 · 新闻男声' },
+      { id: 'zh-CN-YunjianNeural', name: '云健 · 激昂男声 (体育/解说)' },
+      { id: 'zh-CN-XiaochenNeural', name: '晓辰 · 稳重女声' },
+      { id: 'zh-CN-XiaohanNeural', name: '晓涵 · 情感女声' },
+      { id: 'zh-CN-XiaomengNeural', name: '晓梦 · 柔和女声' },
+      { id: 'zh-CN-XiaomoNeural', name: '晓墨 · 叙事女声' },
+      { id: 'zh-CN-XiaoqiuNeural', name: '晓秋 · 自然女声' },
+      { id: 'zh-CN-XiaoruiNeural', name: '晓睿 · 温柔女声' },
+      { id: 'zh-CN-XiaoshuangNeural', name: '晓双 · 童声女' },
+      { id: 'zh-CN-XiaoxuanNeural', name: '晓萱 · 活泼女声' },
+      { id: 'zh-CN-XiaoyanNeural', name: '晓颜 · 温柔女声' },
+      { id: 'zh-CN-XiaozhenNeural', name: '晓甄 · 磁性女声' },
+      { id: 'zh-CN-YunfengNeural', name: '云枫 · 沉稳男声' },
+      { id: 'zh-CN-YunhaoNeural', name: '云皓 · 深沉男声' },
+      { id: 'zh-CN-YunjieNeural', name: '云杰 · 磁性男声' },
+      { id: 'zh-CN-YunxiaNeural', name: '云夏 · 活力男声' },
+      { id: 'zh-CN-YunyeNeural', name: '云野 · 磁性男声' },
+      { id: 'zh-CN-YunzeNeural', name: '云泽 · 播音男声' },
+      { id: 'zh-CN-liaoning-XiaobeiNeural', name: '晓北 · 东北话女声' },
+      { id: 'zh-CN-shaanxi-XiaoniNeural', name: '晓妮 · 陕西话女声' },
+      { id: 'zh-CN-sichuan-YuxiNeural', name: '玉希 · 四川话男声' },
+      { id: 'zh-HK-HiuMaanNeural', name: '晓蔓 · 粤语女声' },
+      { id: 'zh-HK-WanLungNeural', name: '云龙 · 粤语男声' },
+      { id: 'zh-TW-HsiaoChenNeural', name: '晓臻 · 台湾国语女声' },
+      { id: 'zh-TW-YunJheNeural', name: '云哲 · 台湾国语男声' }
+    ];
+
     let books = JSON.parse(localStorage.getItem('weread_books') || 'null') || SAMPLE_BOOKS;
     let bookmarks = JSON.parse(localStorage.getItem('weread_bookmarks') || '{}');
     let edgeConfig = JSON.parse(localStorage.getItem('tingshu_edge_worker_tts') || '{"workerUrl":"","token":"","voice":"zh-CN-YunxiNeural"}');
@@ -837,9 +869,6 @@
     let sleepDeadline = 0;
     let sleepIntervalId = null;
 
-    // 缓存从 Worker 获取到的所有音色列表
-    let fetchedCloudVoices = [];
-
     const $ = s => document.querySelector(s);
 
     function toast(msg) {
@@ -856,33 +885,6 @@
         localStorage.setItem('weread_bookmarks', JSON.stringify(bookmarks));
       } catch (e) {
         toast('本地存储空间已满');
-      }
-    }
-
-    // 从 Worker 动态拉取全部 20+ 个音色
-    async function fetchCloudVoices(workerUrl, token) {
-      if (!workerUrl) return [];
-      try {
-        const res = await fetch(`${workerUrl.replace(/\/$/, '')}/voices`, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-        });
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        // 兼容处理：支持返回数组或带 voices 字段的结构
-        const list = Array.isArray(data) ? data : (data.voices || data.data || []);
-        return list;
-      } catch (e) {
-        // 备用方案：尝试直接请求 OpenAI 兼容的 models 或其他常见路径
-        try {
-          const res2 = await fetch(`${workerUrl.replace(/\/$/, '')}/v1/models`);
-          if (res2.ok) {
-            const d2 = await res2.json();
-            if (Array.isArray(d2.data)) {
-              return d2.data.map(m => ({ id: m.id, name: m.id }));
-            }
-          }
-        } catch (err) {}
-        return [];
       }
     }
 
@@ -1437,7 +1439,8 @@
       engine = mode;
       $('#pillEngineLocal').classList.toggle('active', mode === 'local');
       $('#pillEngineCloud').classList.toggle('active', mode === 'cloud');
-      const shortName = edgeConfig.voice ? edgeConfig.voice.split('-').pop().replace('Neural', '') : '云端音色';
+      const found = ALL_EDGE_VOICES.find(v => v.id === edgeConfig.voice);
+      const shortName = found ? found.name.split('·')[0].trim() : (edgeConfig.voice ? edgeConfig.voice.split('-').pop().replace('Neural', '') : '云端音色');
       $('#labelVoice').textContent = mode === 'cloud' ? shortName : (selectedVoice ? selectedVoice.name.slice(0, 6) : '系统音色');
     }
 
@@ -1513,7 +1516,7 @@
     }
 
     // ==========================================
-    // 抽屉控制（含动态加载音色）
+    // 抽屉控制（内置全部 20+ 音色下拉菜单）
     // ==========================================
     let activeDrawerTab = 'toc';
 
@@ -1573,7 +1576,7 @@
 
       if (activeDrawerTab === 'settings') {
         box.innerHTML = `
-          <h3 style="margin:10px 0 10px;font-size:17px;">云端 Edge TTS 与语音设置</h3>
+          <h3 style="margin:10px 0 14px;font-size:17px;">云端 Edge TTS 与语音设置</h3>
           <div class="form-group">
             <label>Cloudflare Worker 地址</label>
             <input class="form-input" id="cfgUrl" value="${edgeConfig.workerUrl || ''}" placeholder="https://xxx.workers.dev" />
@@ -1582,65 +1585,24 @@
             <label>Worker API Key</label>
             <input class="form-input" id="cfgToken" type="password" value="${edgeConfig.token || ''}" placeholder="填写环境变量 API_KEY" />
           </div>
-          <div class="form-group" style="display:flex;justify-content:space-between;align-items:center;">
-            <label style="margin-bottom:0;">云端神经网络音色（全部 20+ 个）</label>
-            <button class="pill-btn" id="btnFetchVoices" style="font-size:11px;padding:4px 10px;">🔄 自动获取音色</button>
-          </div>
-          <div class="form-group" style="margin-top:6px;">
-            <select class="form-select" id="cfgVoice">
-              <option value="${edgeConfig.voice || 'zh-CN-YunxiNeural'}">${edgeConfig.voice || 'zh-CN-YunxiNeural'}</option>
-            </select>
+          <div class="form-group">
+            <label>云端神经网络音色（内置全部 28 款热门音色）</label>
+            <select class="form-select" id="cfgVoice"></select>
           </div>
           <button class="save-btn" id="btnSaveCfg">保存云端配置并启用</button>
         `;
 
-        // 渲染音色下拉填充
-        const populateVoiceSelect = (voicesList) => {
-          const sel = $('#cfgVoice');
-          sel.innerHTML = '';
-          if (!voicesList || !voicesList.length) {
-            sel.innerHTML = `<option value="${edgeConfig.voice}">${edgeConfig.voice}</option>`;
-            return;
+        const sel = $('#cfgVoice');
+        sel.innerHTML = '';
+        ALL_EDGE_VOICES.forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v.id;
+          opt.textContent = v.name;
+          if (v.id === (edgeConfig.voice || 'zh-CN-YunxiNeural')) {
+            opt.selected = true;
           }
-          voicesList.forEach(v => {
-            const vId = v.id || v.Name || v.ShortName || v;
-            const vName = v.name || v.FriendlyName || vId;
-            const opt = document.createElement('option');
-            opt.value = vId;
-            opt.textContent = `${vName} (${vId})`;
-            if (vId === edgeConfig.voice) opt.selected = true;
-            sel.appendChild(opt);
-          });
-        };
-
-        if (fetchedCloudVoices.length > 0) {
-          populateVoiceSelect(fetchedCloudVoices);
-        } else if (edgeConfig.workerUrl) {
-          fetchCloudVoices(edgeConfig.workerUrl, edgeConfig.token).then(list => {
-            if (list.length) {
-              fetchedCloudVoices = list;
-              populateVoiceSelect(list);
-            }
-          });
-        }
-
-        $('#btnFetchVoices').onclick = async () => {
-          const url = $('#cfgUrl').value.trim();
-          const token = $('#cfgToken').value.trim();
-          if (!url) {
-            toast('请先填写 Worker 地址');
-            return;
-          }
-          toast('正在连接 Worker 获取音色...');
-          const list = await fetchCloudVoices(url, token);
-          if (list.length > 0) {
-            fetchedCloudVoices = list;
-            populateVoiceSelect(list);
-            toast(`成功获取 ${list.length} 个音色`);
-          } else {
-            toast('获取失败，请检查 Worker 地址或跨域');
-          }
-        };
+          sel.appendChild(opt);
+        });
 
         $('#btnSaveCfg').onclick = () => {
           edgeConfig = {
@@ -1774,13 +1736,6 @@
       };
     });
     $('#drawerSearch').oninput = renderDrawerBody;
-
-    // 初始化时若配置了 Worker 地址，后台预抓取音色
-    if (edgeConfig.workerUrl) {
-      fetchCloudVoices(edgeConfig.workerUrl, edgeConfig.token).then(list => {
-        if (list.length) fetchedCloudVoices = list;
-      });
-    }
 
     setEngine(edgeConfig.workerUrl && edgeConfig.token ? 'cloud' : 'local');
     renderShelf();
