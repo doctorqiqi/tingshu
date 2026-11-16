@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <title>听书 · 液态玻璃版</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    :root {
+      --bg: #07070c;
+      --glass: rgba(255, 255, 255, 0.06);
+      --glass-strong: rgba(255, 255, 255, 0.10);
+      --glass-border: rgba(255, 255, 255, 0.14);
+      --glass-highlight: rgba(255, 255, 255, 0.22);
+      --text: #f5f5f7;
+      --text2: rgba(235, 235, 245, 0.62);
+      --text3: rgba(235, 235, 245, 0.38);
+      --accent: #bf5af2;
+      --accent2: #ac8dff;
+      --accent3: #64d2ff;
+      --success: #30d158;
+      --radius: 22px;
+      --radius-sm: 16px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    /* Ambient mesh background */
+    .bg-mesh {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 100% 80% at 10% -20%, rgba(191, 90, 242, 0.28), transparent 50%),
+        radial-gradient(ellipse 80% 60% at 95% 10%, rgba(100, 210, 255, 0.18), transparent 45%),
+        radial-gradient(ellipse 70% 50% at 50% 110%, rgba(172, 141, 255, 0.15), transparent 50%),
+        radial-gradient(ellipse 50% 40% at 80% 80%, rgba(48, 209, 88, 0.06), transparent 40%);
+      animation: meshShift 18s ease-in-out infinite alternate;
+    }
+    @keyframes meshShift {
+      0% { filter: hue-rotate(0deg) saturate(1); }
+      100% { filter: hue-rotate(25deg) saturate(1.15); }
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      max-width: 430px; /* iPhone 14 Pro Max logical width */
+      margin: 0 auto;
+      padding-top: var(--safe-top);
+      padding-bottom: var(--safe-bottom);
+    }
+
+    /* ===== Liquid Glass utilities ===== */
+    .glass {
+      background: var(--glass);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      border: 1px solid var(--glass-border);
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.35),
+        inset 0 1px 0 var(--glass-highlight);
+    }
+    .glass-strong {
+      background: var(--glass-strong);
+      backdrop-filter: blur(48px) saturate(200%);
+      -webkit-backdrop-filter: blur(48px) saturate(200%);
+      border: 1px solid var(--glass-border);
+      box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 var(--glass-highlight);
+    }
+
+    /* Header */
+    header {
+      padding: 12px 20px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(145deg, rgba(191, 90, 242, 0.9), rgba(100, 210, 255, 0.7));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 20px rgba(191, 90, 242, 0.4);
+    }
+    .logo-text {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #fff 30%, #d4bfff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 20px;
+      background: rgba(191, 90, 242, 0.18);
+      color: #e0c3ff;
+      border: 1px solid rgba(191, 90, 242, 0.3);
+    }
+
+    /* Tabs - liquid pill */
+    .tabs-wrap {
+      padding: 8px 16px 12px;
+      flex-shrink: 0;
+    }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(20px);
+    }
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 11px 0;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text2);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      font-family: inherit;
+    }
+    .tab.active {
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--text);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    /* Main scroll */
+    main {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 0 16px;
+      padding-bottom: calc(100px + var(--safe-bottom));
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .section-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text3);
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      margin: 16px 4px 10px;
+    }
+
+    /* Upload - liquid glass card */
+    .upload-card {
+      border-radius: var(--radius);
+      padding: 28px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+    .upload-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(191, 90, 242, 0.08), rgba(100, 210, 255, 0.05));
+      pointer-events: none;
+    }
+    .upload-card:active { transform: scale(0.98); }
+    .upload-icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+      filter: drop-shadow(0 4px 12px rgba(191, 90, 242, 0.3));
+    }
+    .upload-card p {
+      font-size: 15px;
+      color: var(--text2);
+      position: relative;
+    }
+    .upload-card strong { color: #e0c3ff; }
+    .format-row {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 14px;
+      position: relative;
+    }
+    .format-chip {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text2);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Book cards */
+    .book-list { display: flex; flex-direction: column; gap: 10px; }
+    .book-card {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .book-card:active { transform: scale(0.98); }
+    .book-card.active {
+      background: rgba(191, 90, 242, 0.12);
+      border-color: rgba(191, 90, 242, 0.35);
+    }
+    .book-cover {
+      width: 54px;
+      height: 74px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      flex-shrink: 0;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+      position: relative;
+      overflow: hidden;
+    }
+    .book-cover::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.3), transparent 50%);
+    }
+    .book-info { flex: 1; min-width: 0; }
+    .book-title {
+      font-size: 15px;
+      font-weight: 650;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      letter-spacing: -0.2px;
+    }
+    .book-meta {
+      font-size: 12px;
+      color: var(--text2);
+      margin-top: 2px;
+    }
+    .book-progress {
+      height: 3px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    .book-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent3));
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+    .book-type {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.35);
+      color: var(--text2);
+      backdrop-filter: blur(8px);
+    }
+
+    /* ===== Player ===== */
+    .player-view { display: none; flex-direction: column; min-height: 100%; }
+    .player-view.active { display: flex; }
+
+    .player-hero {
+      text-align: center;
+      padding: 8px 0 4px;
+    }
+    .cover-stage {
+      position: relative;
+      width: 200px;
+      height: 260px;
+      margin: 0 auto 18px;
+    }
+    .cover-glow {
+      position: absolute;
+      inset: -30px;
+      background: radial-gradient(circle, rgba(191, 90, 242, 0.35), transparent 65%);
+      filter: blur(20px);
+      z-index: 0;
+      opacity: 0.7;
+      transition: opacity 0.5s;
+    }
+    .cover-glow.playing { opacity: 1; animation: glowPulse 3s ease-in-out infinite; }
+    @keyframes glowPulse {
+      0%, 100% { transform: scale(1); opacity: 0.7; }
+      50% { transform: scale(1.08); opacity: 1; }
+    }
+    .player-cover {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 72px;
+      box-shadow:
+        0 20px 50px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+    }
+    .player-cover.playing { animation: coverFloat 4s ease-in-out infinite; }
+    @keyframes coverFloat {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-6px) scale(1.02); }
+    }
+    .player-cover::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 40%);
+    }
+    .player-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      padding: 0 12px;
+      margin-bottom: 4px;
+    }
+    .player-author {
+      font-size: 14px;
+      color: var(--text2);
+    }
+
+    /* Subtitle glass */
+    .subtitle-box {
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      margin: 16px 0 10px;
+      max-height: 130px;
+      overflow-y: auto;
+      font-size: 15px;
+      line-height: 1.7;
+      scroll-behavior: smooth;
+    }
+    .subtitle-box .current {
+      background: linear-gradient(90deg, rgba(191, 90, 242, 0.35), rgba(100, 210, 255, 0.2));
+      border-radius: 5px;
+      padding: 1px 4px;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+    }
+
+    /* Controls */
+    .controls { margin-top: auto; padding: 6px 0 12px; }
+
+    .progress-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .time {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text2);
+      min-width: 36px;
+      font-variant-numeric: tabular-nums;
+    }
+    .progress-track {
+      flex: 1;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      cursor: pointer;
+      position: relative;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--accent3));
+      position: relative;
+      pointer-events: none;
+    }
+    .progress-fill::after {
+      content: "";
+      position: absolute;
+      right: -6px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 10px rgba(191, 90, 242, 0.5);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .progress-track:active .progress-fill::after { opacity: 1; }
+
+    .main-ctrls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+      margin-bottom: 18px;
+    }
+    .ctrl {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-family: inherit;
+    }
+    .ctrl:active { transform: scale(0.92); }
+    .ctrl.play {
+      width: 70px;
+      height: 70px;
+      font-size: 28px;
+      background: linear-gradient(145deg, rgba(191, 90, 242, 0.9), rgba(100, 210, 255, 0.75));
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 28px rgba(191, 90, 242, 0.4);
+    }
+
+    .sec-ctrls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .ctrl-group {
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+    }
+    .ctrl-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text3);
+      margin-bottom: 4px;
+    }
+    .ctrl-group select {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      cursor: pointer;
+    }
+    .ctrl-group select option { background: #1c1c1e; }
+
+    input[type="range"] {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 2px;
+      margin-top: 6px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 8px rgba(191, 90, 242, 0.5);
+      cursor: pointer;
+    }
+
+    .engine-row {
+      grid-column: 1 / -1;
+      display: flex;
+      padding: 4px;
+      border-radius: 14px;
+      gap: 4px;
+    }
+    .engine-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 11px;
+      background: transparent;
+      color: var(--text2);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s;
+      font-family: inherit;
+    }
+    .engine-btn.active {
+      background: linear-gradient(135deg, rgba(191, 90, 242, 0.85), rgba(100, 210, 255, 0.65));
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(191, 90, 242, 0.3);
+    }
+
+    /* Settings */
+    .settings-view { display: none; }
+    .settings-view.active { display: block; }
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+    }
+    .setting-row label { font-size: 15px; font-weight: 500; }
+    .setting-row select {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 6px 10px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    /* Mini player - liquid glass dock */
+    .dock {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 430px;
+      padding: 10px 16px calc(10px + var(--safe-bottom));
+      z-index: 50;
+      display: none;
+    }
+    .dock-inner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 18px;
+    }
+    .dock-cover {
+      width: 40px;
+      height: 52px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .dock-info { flex: 1; min-width: 0; }
+    .dock-title {
+      font-size: 14px;
+      font-weight: 650;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .dock-state { font-size: 12px; color: var(--text2); margin-top: 1px; }
+    .dock-play {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(145deg, rgba(191, 90, 242, 0.9), rgba(100, 210, 255, 0.7));
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(191, 90, 242, 0.35);
+      font-family: inherit;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      top: calc(60px + var(--safe-top));
+      left: 50%;
+      transform: translateX(-50%) translateY(-12px);
+      padding: 12px 20px;
+      border-radius: 30px;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0;
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 100;
+      pointer-events: none;
+      max-width: 90%;
+      text-align: center;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Loading */
+    .loading {
+      position: fixed;
+      inset: 0;
+      background: rgba(7, 7, 12, 0.7);
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .loading.show { opacity: 1; pointer-events: auto; }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-bottom: 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text2);
+    }
+    .empty .icon { font-size: 48px; margin-bottom: 12px; opacity: 0.6; }
+
+    /* iPhone 14 Pro Max specific tuning */
+    @media (min-width: 428px) {
+      .app { max-width: 430px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-mesh"></div>
+
+  <div class="app">
+    <header>
+      <div class="logo">
+        <div class="logo-icon">🎧</div>
+        <div class="logo-text">听书</div>
+      </div>
+      <div class="badge">液态玻璃 · 测试版</div>
+    </header>
+
+    <div class="tabs-wrap">
+      <div class="tabs">
+        <button class="tab active" data-tab="library">书架</button>
+        <button class="tab" data-tab="player">播放</button>
+        <button class="tab" data-tab="settings">设置</button>
+      </div>
+    </div>
+
+    <main>
+      <!-- Library -->
+      <div id="libraryView">
+        <div class="section-label">导入书籍</div>
+        <div class="upload-card glass" id="uploadArea">
+          <div class="upload-icon">📚</div>
+          <p>点击或拖拽上传电子书</p>
+          <div class="format-row">
+            <span class="format-chip">EPUB</span>
+            <span class="format-chip">TXT</span>
+          </div>
+          <input type="file" id="fileInput" accept=".epub,.txt,.text,text/plain,application/epub+zip" hidden />
+        </div>
+
+        <div class="section-label">我的书架</div>
+        <div class="book-list" id="bookList"></div>
+      </div>
+
+      <!-- Player -->
+      <div id="playerView" class="player-view">
+        <div class="player-hero">
+          <div class="cover-stage">
+            <div class="cover-glow" id="coverGlow"></div>
+            <div class="player-cover" id="playerCover">📖</div>
+          </div>
+          <div class="player-title" id="playerTitle">选择一本书开始听</div>
+          <div class="player-author" id="playerAuthor">—</div>
+        </div>
+
+        <div class="subtitle-box glass" id="subtitleBox">
+          <span style="color:var(--text2)">上传或选择书籍后，这里会显示当前朗读文字…</span>
+        </div>
+
+        <div class="controls">
+          <div class="progress-row">
+            <span class="time" id="currentTime">0:00</span>
+            <div class="progress-track" id="progressTrack">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <span class="time" id="totalTime">0:00</span>
+          </div>
+
+          <div class="main-ctrls">
+            <button class="ctrl" id="btnPrev">⏮</button>
+            <button class="ctrl play" id="btnPlay">▶</button>
+            <button class="ctrl" id="btnNext">⏭</button>
+          </div>
+
+          <div class="sec-ctrls">
+            <div class="engine-row glass">
+              <button class="engine-btn active" data-engine="local">本地语音</button>
+              <button class="engine-btn" data-engine="cloud">云端 AI 语音</button>
+            </div>
+
+            <div class="ctrl-group glass">
+              <label>语速 <span id="rateValue">1.0x</span></label>
+              <input type="range" id="rateRange" min="0.6" max="2.2" step="0.1" value="1.0" />
+            </div>
+
+            <div class="ctrl-group glass">
+              <label>音色</label>
+              <select id="voiceSelect"></select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div id="settingsView" class="settings-view">
+        <div class="section-label">语音引擎</div>
+        <div class="setting-row glass">
+          <label>默认引擎</label>
+          <select id="defaultEngine">
+            <option value="local">本地（系统 TTS）</option>
+            <option value="cloud">云端 AI（免费）</option>
+          </select>
+        </div>
+
+        <div class="section-label">播放</div>
+        <div class="setting-row glass">
+          <label>默认语速</label>
+          <select id="defaultRate">
+            <option value="0.8">0.8x</option>
+            <option value="1.0" selected>1.0x</option>
+            <option value="1.2">1.2x</option>
+            <option value="1.5">1.5x</option>
+          </select>
+        </div>
+        <div class="setting-row glass">
+          <label>自动滚动字幕</label>
+          <input type="checkbox" id="autoScroll" checked style="width:20px;height:20px;accent-color:#bf5af2;" />
+        </div>
+
+        <div class="section-label">关于</div>
+        <div class="setting-row glass" style="flex-direction:column;align-items:flex-start;gap:8px;">
+          <div style="font-size:15px;font-weight:650;">听书 · 液态玻璃版</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.7;">
+            • 适配 iPhone 14 Pro Max 安全区<br>
+            • 支持 EPUB / TXT 本地解析<br>
+            • 本地语音：Web Speech API<br>
+            • 云端语音：免费 Google TTS 接口<br>
+            • 纯静态，可直接部署 GitHub Pages
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Dock mini player -->
+    <div class="dock" id="dock">
+      <div class="dock-inner glass-strong">
+        <div class="dock-cover" id="dockCover">📖</div>
+        <div class="dock-info">
+          <div class="dock-title" id="dockTitle">—</div>
+          <div class="dock-state" id="dockState">已暂停</div>
+        </div>
+        <button class="dock-play" id="dockPlay">▶</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast glass-strong" id="toast"></div>
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div style="color:var(--text2);font-size:14px;font-weight:500;">正在解析 EPUB…</div>
+  </div>
+
+  <!-- Hidden audio for cloud TTS -->
+  <audio id="cloudAudio" preload="auto"></audio>
+
+  <script>
+    const COVER_COLORS = [
+      ['#5b21b6', '#a78bfa'], ['#1e3a8a', '#60a5fa'], ['#065f46', '#34d399'],
+      ['#9a3412', '#fb923c'], ['#86198f', '#e879f9'], ['#1e1b4b', '#818cf8'],
+      ['#9f1239', '#fb7185'], ['#134e4a', '#2dd4bf']
+    ];
+
+    const SAMPLES = [
+      {
+        id: 's1', title: '小王子（节选）', author: '圣-埃克苏佩里', cover: '🌹', type: 'TXT',
+        color: COVER_COLORS[0],
+        content: `从前有一个小王子，住在一个和他身体差不多大的星球上。他需要一个朋友。
+有一天，他离开了自己的星球，开始了旅行。
+他先后拜访了好几个星球，见到了国王、爱虚荣的人、酒鬼、商人、点灯人和地理学家。
+最后，小王子来到了地球。
+在沙漠里，他遇见了一只狐狸。狐狸告诉他：“只有用心才能看得见。本质的东西，眼睛是看不见的。”
+小王子明白了，对自己的玫瑰花有了更深的感情。
+他最终决定返回自己的星球，去陪伴那朵独一无二的玫瑰。`
+      },
+      {
+        id: 's2', title: '道德经（节选）', author: '老子', cover: '☯️', type: 'TXT',
+        color: COVER_COLORS[1],
+        content: `道可道，非常道。名可名，非常名。
+无名天地之始，有名万物之母。
+故常无欲，以观其妙；常有欲，以观其徼。
+此两者同出而异名，同谓之玄。玄之又玄，众妙之门。
+天下皆知美之为美，斯恶已；皆知善之为善，斯不善已。
+有无相生，难易相成，长短相形，高下相倾，音声相和，前后相随。
+是以圣人处无为之事，行不言之教。`
+      },
+      {
+        id: 's3', title: '听书功能演示', author: '系统示例', cover: '🎧', type: 'TXT',
+        color: COVER_COLORS[2],
+        content: `欢迎使用听书液态玻璃测试版。
+本页面专为 iPhone 14 Pro Max 适配，采用液态玻璃视觉风格。
+支持本地系统语音，以及免费的云端 AI 语音合成。
+你可以上传 EPUB 或 TXT 电子书，在本地完成解析后直接听书。
+切换引擎、调节语速，体验完整的听书流程。`
+      }
+    ];
+
+    let books = [...SAMPLES];
+    let currentBook = null;
+    let sentences = [];
+    let currentIndex = 0;
+    let isPlaying = false;
+    let currentEngine = 'local';
+    let rate = 1.0;
+    let voices = [];
+    let selectedVoice = null;
+    let cloudAudio = document.getElementById('cloudAudio');
+
+    const $ = s => document.querySelector(s);
+
+    function toast(msg) {
+      const t = $('#toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2400);
+    }
+
+    function splitSentences(text) {
+      return text.replace(/\r\n/g, '\n').replace(/\n+/g, '\n')
+        .split(/(?<=[。！？；!?;\n])/)
+        .map(s => s.trim()).filter(s => s.length > 1);
+    }
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+      return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function pickColor(id) {
+      let h = 0;
+      for (let i = 0; i < id.length; i++) h = id.charCodeAt(i) + ((h << 5) - h);
+      return COVER_COLORS[Math.abs(h) % COVER_COLORS.length];
+    }
+
+    function setCover(el, book) {
+      const [c1, c2] = book.color || pickColor(book.id);
+      el.style.background = `linear-gradient(145deg, ${c1}, ${c2})`;
+      el.textContent = book.cover || '📖';
+    }
+
+    // ===== EPUB Parser =====
+    async function parseEPUB(file) {
+      $('#loading').classList.add('show');
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const containerXml = await zip.file('META-INF/container.xml')?.async('string');
+        if (!containerXml) throw new Error('无效 EPUB');
+        const parser = new DOMParser();
+        const containerDoc = parser.parseFromString(containerXml, 'application/xml');
+        const opfPath = containerDoc.querySelector('rootfile')?.getAttribute('full-path');
+        if (!opfPath) throw new Error('找不到 OPF');
+        const opfContent = await zip.file(opfPath)?.async('string');
+        const opfDoc = parser.parseFromString(opfContent, 'application/xml');
+
+        const getMeta = n => opfDoc.querySelector(`metadata > *|${n}, metadata > ${n}`)?.textContent?.trim() || '';
+        const title = getMeta('title') || file.name.replace(/\.epub$/i, '');
+        const author = getMeta('creator') || '未知作者';
+
+        const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
+        const manifest = {};
+        opfDoc.querySelectorAll('manifest > item').forEach(item => {
+          const id = item.getAttribute('id'), href = item.getAttribute('href');
+          const media = item.getAttribute('media-type') || '';
+          if (id && href) manifest[id] = { href: opfDir + href, media };
+        });
+        const spine = [];
+        opfDoc.querySelectorAll('spine > itemref').forEach(ref => {
+          const idref = ref.getAttribute('idref');
+          if (idref && manifest[idref]) spine.push(manifest[idref]);
+        });
+
+        let fullText = '';
+        for (let i = 0; i < Math.min(spine.length, 35); i++) {
+          const item = spine[i];
+          if (!item.media.includes('html') && !item.media.includes('xml')) continue;
+          try {
+            const content = await zip.file(item.href)?.async('string');
+            if (!content) continue;
+            const doc = parser.parseFromString(content, 'application/xhtml+xml');
+            doc.querySelectorAll('script, style, nav').forEach(n => n.remove());
+            const body = doc.querySelector('body') || doc.documentElement;
+            let text = (body.textContent || '').replace(/\s+/g, ' ').trim();
+            if (text.length > 20) fullText += text + '\n\n';
+          } catch (e) {}
+        }
+        fullText = fullText.trim();
+        if (fullText.length < 30) throw new Error('未能提取正文（可能是加密或图片型 EPUB）');
+        if (fullText.length > 60000) fullText = fullText.slice(0, 60000) + '\n\n……（已截取前部分）';
+
+        return {
+          id: 'epub-' + Date.now(), title, author, cover: '📕', type: 'EPUB',
+          color: pickColor(title), content: fullText
+        };
+      } finally {
+        $('#loading').classList.remove('show');
+      }
+    }
+
+    // ===== Local TTS（中文音色优化）=====
+    // 高质量中文音色名称关键词（按优先级）
+    const PREFERRED_ZH_VOICES = [
+      // iOS / macOS 优质中文
+      'tingting', 'ting-ting', 'meijia', 'mei-jia', 'sinji', 'sin-ji',
+      'yu-shu', 'yushu', 'lilian', 'li-li', 'stella', 'wendy',
+      'susan', 'karen', 'kyoko',
+      // Google / Chrome
+      'google 普通话', 'google普通话', 'google us english', 'google 國語',
+      'google 粤語', 'google 粵語',
+      // Microsoft Edge / Windows
+      'microsoft xiaoxiao', 'microsoft xiaoyi', 'microsoft yunyi',
+      'microsoft xiaohan', 'microsoft xiaomeng', 'microsoft xiaoqiu',
+      'microsoft xiaoxuan', 'microsoft xiaoyan', 'microsoft xiaozhen',
+      'microsoft hsiaochen', 'microsoft hsiaoyu',
+      'xiaoxiao', 'xiaoyi', 'yunxi', 'yunyang', 'xiaomeng',
+      // 通用优质标识
+      'enhanced', 'premium', 'neural', 'natural', 'online'
+    ];
+
+    function scoreVoice(v) {
+      const name = (v.name || '').toLowerCase();
+      const lang = (v.lang || '').toLowerCase();
+      let score = 0;
+
+      // 语言加分
+      if (lang === 'zh-cn' || lang === 'zh_cn' || lang.startsWith('zh-cn')) score += 100;
+      else if (lang.includes('zh-cn') || lang.includes('cmn-hans')) score += 95;
+      else if (lang.startsWith('zh') || lang.includes('cmn') || lang.includes('chinese')) score += 70;
+      else if (lang.startsWith('en')) score += 20;
+      else score += 5;
+
+      // 优质名称加分
+      for (let i = 0; i < PREFERRED_ZH_VOICES.length; i++) {
+        if (name.includes(PREFERRED_ZH_VOICES[i])) {
+          score += 80 - Math.min(i, 20); // 越靠前分越高
+          break;
+        }
+      }
+
+      // 本地/增强/神经网络加分
+      if (v.localService === false) score += 25; // 云端增强音往往更自然
+      if (name.includes('enhanced') || name.includes('premium') || name.includes('neural')) score += 30;
+      if (name.includes('compact')) score -= 15; // 压缩音质较差
+
+      // 女声轻微加分（听书更常见偏好）
+      if (/female|woman|girl|ting|xiao|mei|li|susan|karen|stella|wendy|yunxia|xiaoxiao|xiaoyi/i.test(name)) {
+        score += 8;
+      }
+
+      return score;
+    }
+
+    function loadVoices() {
+      const all = speechSynthesis.getVoices();
+      if (!all.length) return;
+
+      // 打分排序：中文优质音色优先
+      voices = [...all].sort((a, b) => scoreVoice(b) - scoreVoice(a));
+
+      // 至少保留一些中文 + 英文
+      const zhVoices = voices.filter(v => {
+        const l = (v.lang || '').toLowerCase();
+        return l.startsWith('zh') || l.includes('cmn') || l.includes('chinese');
+      });
+      const enVoices = voices.filter(v => (v.lang || '').toLowerCase().startsWith('en'));
+
+      // 展示用：中文在前，再跟英文，去重后限制数量
+      const display = [];
+      const seen = new Set();
+      [...zhVoices, ...enVoices, ...voices].forEach(v => {
+        const key = v.name + v.lang;
+        if (!seen.has(key) && display.length < 40) {
+          seen.add(key);
+          display.push(v);
+        }
+      });
+      voices = display.length ? display : all;
+
+      const sel = $('#voiceSelect');
+      const prevName = selectedVoice ? selectedVoice.name : null;
+      sel.innerHTML = '';
+
+      // 分组：中文 / 其他
+      const zhGroup = document.createElement('optgroup');
+      zhGroup.label = '中文音色（推荐）';
+      const otherGroup = document.createElement('optgroup');
+      otherGroup.label = '其他语言';
+
+      voices.forEach((v, i) => {
+        const o = document.createElement('option');
+        o.value = i;
+        const q = scoreVoice(v);
+        const tag = q >= 150 ? ' ★' : q >= 100 ? ' ✓' : '';
+        o.textContent = `${v.name}${tag}`;
+        o.title = `${v.name} · ${v.lang}`;
+        const isZh = (v.lang || '').toLowerCase().startsWith('zh') ||
+                     (v.lang || '').toLowerCase().includes('cmn');
+        if (isZh) zhGroup.appendChild(o);
+        else otherGroup.appendChild(o);
+      });
+
+      if (zhGroup.children.length) sel.appendChild(zhGroup);
+      if (otherGroup.children.length) sel.appendChild(otherGroup);
+
+      // 恢复或选择最佳中文音色
+      let bestIdx = 0;
+      if (prevName) {
+        const idx = voices.findIndex(v => v.name === prevName);
+        if (idx >= 0) bestIdx = idx;
+      } else {
+        // 选得分最高的中文音色
+        let bestScore = -1;
+        voices.forEach((v, i) => {
+          const s = scoreVoice(v);
+          const isZh = (v.lang || '').toLowerCase().startsWith('zh') ||
+                       (v.lang || '').toLowerCase().includes('cmn');
+          if (isZh && s > bestScore) {
+            bestScore = s;
+            bestIdx = i;
+          }
+        });
+      }
+      sel.value = bestIdx;
+      selectedVoice = voices[bestIdx] || voices[0] || null;
+
+      // 首次加载时给用户提示
+      if (selectedVoice && !window._voiceTipShown) {
+        window._voiceTipShown = true;
+        const isZh = (selectedVoice.lang || '').toLowerCase().includes('zh') ||
+                     (selectedVoice.lang || '').toLowerCase().includes('cmn');
+        if (isZh) {
+          console.log('[听书] 已优选中文音色:', selectedVoice.name, selectedVoice.lang);
+        }
+      }
+    }
+
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    // 多次尝试加载（部分浏览器延迟就绪）
+    loadVoices();
+    setTimeout(loadVoices, 300);
+    setTimeout(loadVoices, 1000);
+
+    // ===== Cloud TTS (free Google Translate TTS) =====
+    function cloudTTSUrl(text, lang = 'zh-CN') {
+      const q = encodeURIComponent(text.slice(0, 180));
+      return `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${q}`;
+    }
+
+    function speakCloud(index) {
+      if (!sentences.length || index < 0 || index >= sentences.length) {
+        stopAll();
+        return;
+      }
+      currentIndex = index;
+      updateSubtitle();
+      updateProgress();
+
+      const text = sentences[index];
+      const lang = /[\u4e00-\u9fff]/.test(text) ? 'zh-CN' : 'en';
+      const url = cloudTTSUrl(text, lang);
+
+      cloudAudio.onended = () => {
+        if (isPlaying && currentIndex < sentences.length - 1) {
+          speakCloud(currentIndex + 1);
+        } else {
+          isPlaying = false;
+          updatePlayUI();
+        }
+      };
+      cloudAudio.onerror = () => {
+        toast('云端语音暂时不可用，已切回本地');
+        currentEngine = 'local';
+        document.querySelectorAll('.engine-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.engine === 'local');
+        });
+        speakLocal(currentIndex);
+      };
+
+      cloudAudio.src = url;
+      cloudAudio.playbackRate = Math.min(Math.max(rate, 0.7), 1.5);
+      cloudAudio.play().catch(() => {
+        toast('云端播放失败，尝试本地语音');
+        speakLocal(currentIndex);
+      });
+      isPlaying = true;
+      updatePlayUI();
+    }
+
+    function speakLocal(index) {
+      if (!sentences.length || index < 0 || index >= sentences.length) {
+        stopAll();
+        return;
+      }
+      speechSynthesis.cancel();
+      currentIndex = index;
+      updateSubtitle();
+      updateProgress();
+
+      const text = sentences[index];
+      const u = new SpeechSynthesisUtterance(text);
+
+      // 中文优化参数
+      const isZh = /[\u4e00-\u9fff]/.test(text);
+      // 中文语速略降更自然（用户 rate 仍生效）
+      u.rate = isZh ? Math.max(0.7, rate * 0.95) : rate;
+      // 中文轻微降调，听感更稳
+      u.pitch = isZh ? 0.98 : 1.0;
+      u.volume = 1;
+
+      // 强制指定语言，帮助引擎选对发音
+      u.lang = isZh ? 'zh-CN' : (selectedVoice?.lang || 'en-US');
+
+      if (selectedVoice) {
+        u.voice = selectedVoice;
+        // 若当前音色不是中文，但文本是中文，尝试临时切到最佳中文音色
+        if (isZh) {
+          const vLang = (selectedVoice.lang || '').toLowerCase();
+          if (!vLang.startsWith('zh') && !vLang.includes('cmn')) {
+            const bestZh = voices.find(v => {
+              const l = (v.lang || '').toLowerCase();
+              return l.startsWith('zh') || l.includes('cmn');
+            });
+            if (bestZh) u.voice = bestZh;
+          }
+        }
+      }
+
+      u.onend = () => {
+        if (isPlaying && currentIndex < sentences.length - 1) speakLocal(currentIndex + 1);
+        else { isPlaying = false; updatePlayUI(); }
+      };
+      u.onerror = () => { isPlaying = false; updatePlayUI(); };
+      speechSynthesis.speak(u);
+      isPlaying = true;
+      updatePlayUI();
+    }
+
+    function speak(index) {
+      stopAll(false);
+      if (currentEngine === 'cloud') speakCloud(index);
+      else speakLocal(index);
+    }
+
+    function stopAll(reset = true) {
+      speechSynthesis.cancel();
+      cloudAudio.pause();
+      cloudAudio.removeAttribute('src');
+      if (reset) isPlaying = false;
+      updatePlayUI();
+    }
+
+    function togglePlay() {
+      if (!currentBook || !sentences.length) { toast('请先选择一本书'); return; }
+      if (isPlaying) {
+        if (currentEngine === 'cloud') {
+          cloudAudio.pause();
+        } else {
+          speechSynthesis.pause();
+        }
+        isPlaying = false;
+        updatePlayUI();
+      } else {
+        if (currentEngine === 'cloud' && cloudAudio.src && !cloudAudio.ended) {
+          cloudAudio.play();
+          isPlaying = true;
+          updatePlayUI();
+        } else if (currentEngine === 'local' && speechSynthesis.paused) {
+          speechSynthesis.resume();
+          isPlaying = true;
+          updatePlayUI();
+        } else {
+          speak(currentIndex);
+        }
+      }
+    }
+
+    // ===== UI =====
+    function updatePlayUI() {
+      const icon = isPlaying ? '⏸' : '▶';
+      $('#btnPlay').textContent = icon;
+      $('#dockPlay').textContent = icon;
+      $('#dockState').textContent = isPlaying
+        ? `播放中 · ${currentEngine === 'local' ? '本地' : '云端 AI'}`
+        : '已暂停';
+      $('#coverGlow').classList.toggle('playing', isPlaying);
+      $('#playerCover').classList.toggle('playing', isPlaying);
+    }
+
+    function updateSubtitle() {
+      if (!sentences.length) {
+        $('#subtitleBox').innerHTML = '<span style="color:var(--text2)">暂无内容</span>';
+        return;
+      }
+      const start = Math.max(0, currentIndex - 1);
+      const end = Math.min(sentences.length, currentIndex + 5);
+      let html = start > 0 ? '… ' : '';
+      for (let i = start; i < end; i++) {
+        html += i === currentIndex
+          ? `<span class="current">${sentences[i]}</span> `
+          : sentences[i] + ' ';
+      }
+      if (end < sentences.length) html += '…';
+      $('#subtitleBox').innerHTML = html;
+      if ($('#autoScroll')?.checked) {
+        const cur = $('#subtitleBox').querySelector('.current');
+        if (cur) cur.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    function updateProgress() {
+      if (!sentences.length) {
+        $('#progressFill').style.width = '0%';
+        $('#currentTime').textContent = '0:00';
+        $('#totalTime').textContent = '0:00';
+        return;
+      }
+      const pct = ((currentIndex + 1) / sentences.length) * 100;
+      $('#progressFill').style.width = pct + '%';
+      const totalChars = sentences.reduce((a, s) => a + s.length, 0);
+      const passed = sentences.slice(0, currentIndex + 1).reduce((a, s) => a + s.length, 0);
+      $('#currentTime').textContent = formatTime(passed / (4.2 * rate));
+      $('#totalTime').textContent = formatTime(totalChars / (4.2 * rate));
+      if (currentBook) {
+        const card = document.querySelector(`.book-card[data-id="${currentBook.id}"]`);
+        if (card) {
+          const bar = card.querySelector('.book-progress-bar');
+          if (bar) bar.style.width = pct + '%';
+        }
+      }
+    }
+
+    function renderBooks() {
+      const list = $('#bookList');
+      list.innerHTML = '';
+      if (!books.length) {
+        list.innerHTML = `<div class="empty"><div class="icon">📚</div><p>还没有书籍</p></div>`;
+        return;
+      }
+      books.forEach(book => {
+        const [c1, c2] = book.color || pickColor(book.id);
+        const card = document.createElement('div');
+        card.className = 'book-card glass' + (currentBook?.id === book.id ? ' active' : '');
+        card.dataset.id = book.id;
+        card.innerHTML = `
+          <div class="book-cover" style="background:linear-gradient(145deg,${c1},${c2})">${book.cover || '📖'}</div>
+          <div class="book-info">
+            <div class="book-title">${book.title}</div>
+            <div class="book-meta">${book.author} · ${(book.content.length / 1000).toFixed(1)}k 字</div>
+            <div class="book-progress"><div class="book-progress-bar"></div></div>
+          </div>
+          <div class="book-type">${book.type || 'TXT'}</div>
+        `;
+        card.addEventListener('click', () => selectBook(book.id));
+        list.appendChild(card);
+      });
+    }
+
+    function selectBook(id) {
+      const book = books.find(b => b.id === id);
+      if (!book) return;
+      stopAll();
+      currentBook = book;
+      sentences = splitSentences(book.content);
+      currentIndex = 0;
+      $('#playerTitle').textContent = book.title;
+      $('#playerAuthor').textContent = book.author;
+      setCover($('#playerCover'), book);
+      setCover($('#dockCover'), book);
+      $('#dockTitle').textContent = book.title;
+      $('#dock').style.display = 'block';
+      updateSubtitle();
+      updateProgress();
+      renderBooks();
+      switchTab('player');
+      toast(`已加载：${book.title}`);
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+      $('#libraryView').style.display = name === 'library' ? 'block' : 'none';
+      $('#playerView').classList.toggle('active', name === 'player');
+      $('#settingsView').classList.toggle('active', name === 'settings');
+    }
+
+    // Events
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+    $('#uploadArea').addEventListener('click', () => $('#fileInput').click());
+    $('#fileInput').addEventListener('change', async () => {
+      const file = $('#fileInput').files[0];
+      if (!file) return;
+      try {
+        if (file.name.toLowerCase().endsWith('.epub')) {
+          const book = await parseEPUB(file);
+          books.unshift(book);
+          renderBooks();
+          selectBook(book.id);
+          toast('EPUB 导入成功');
+        } else {
+          const reader = new FileReader();
+          reader.onload = e => {
+            const book = {
+              id: 'u-' + Date.now(),
+              title: file.name.replace(/\.txt$/i, ''),
+              author: '本地导入',
+              cover: '📄',
+              type: 'TXT',
+              color: pickColor(file.name),
+              content: e.target.result.slice(0, 80000)
+            };
+            books.unshift(book);
+            renderBooks();
+            selectBook(book.id);
+            toast('TXT 导入成功');
+          };
+          reader.readAsText(file, 'UTF-8');
+        }
+      } catch (err) {
+        toast('解析失败：' + (err.message || '未知错误'));
+      }
+      $('#fileInput').value = '';
+    });
+
+    $('#btnPlay').addEventListener('click', togglePlay);
+    $('#dockPlay').addEventListener('click', togglePlay);
+    $('#btnPrev').addEventListener('click', () => { if (currentIndex > 0) speak(currentIndex - 1); });
+    $('#btnNext').addEventListener('click', () => { if (currentIndex < sentences.length - 1) speak(currentIndex + 1); });
+
+    $('#rateRange').addEventListener('input', () => {
+      rate = parseFloat($('#rateRange').value);
+      $('#rateValue').textContent = rate.toFixed(1) + 'x';
+      if (isPlaying) speak(currentIndex);
+    });
+
+    $('#voiceSelect').addEventListener('change', () => {
+      selectedVoice = voices[parseInt($('#voiceSelect').value)];
+      if (isPlaying && currentEngine === 'local') speak(currentIndex);
+    });
+
+    document.querySelectorAll('.engine-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.engine-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentEngine = btn.dataset.engine;
+        toast(currentEngine === 'local' ? '已切换到本地语音' : '已切换到云端 AI 语音');
+        if (isPlaying) speak(currentIndex);
+      });
+    });
+
+    $('#progressTrack').addEventListener('click', e => {
+      if (!sentences.length) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      speak(Math.max(0, Math.min(Math.floor(pct * sentences.length), sentences.length - 1)));
+    });
+
+    renderBooks();
+  </script>
+</body>
+</html>
