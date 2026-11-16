@@ -1037,48 +1037,132 @@
       });
     }
 
+    // ---------- 章节标题识别（TXT / EPUB 兜底共用） ----------
+    const CN_NUM = '[零〇一二三四五六七八九十百千万两0-9０-９]+';
+    const CHAP_TITLE_RE = new RegExp(
+      '^\\s*(?:' +
+        '第\\s*' + CN_NUM + '\\s*(?:[章回卷集部篇幕]|节(?=$|[\\s:：、.．—\\-]))' +
+        '|(?:chapter|CHAPTER|Chapter)\\s*(?:[0-9]+|[IVXLCivxlc]+)(?![A-Za-z])' +
+        '|(?:序言|序章|序|前言|后记|引子|楔子|尾声|终章|结语)(?:$|[\\s:：、.．—\\-])' +
+        '|番外' +
+      ')'
+    );
+    function isChapterTitleLine(line) {
+      const t = String(line || '').trim();
+      return t.length > 0 && t.length <= 40 && !/[。；;，,]$/.test(t) && CHAP_TITLE_RE.test(t);
+    }
+    const SKIP_LABEL_RE = /^(目\s*录|contents?|table of contents|封面|cover)$/i;
+    const normLabel = s => String(s || '').replace(/\s+/g, '').toLowerCase();
+
+    // 自动识别 UTF-8 / GBK(GB18030) 编码，避免中文 TXT 乱码导致目录识别失败
+    async function readTextAuto(file) {
+      const buf = await file.arrayBuffer();
+      try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(buf);
+      } catch (e) {
+        try { return new TextDecoder('gb18030').decode(buf); }
+        catch (e2) { return new TextDecoder('utf-8').decode(buf); }
+      }
+    }
+
     function splitTxtToChapters(rawText, bookTitle) {
       const lines = rawText.replace(/\r\n?/g, '\n').split('\n');
       const chapters = [];
-      const chapRegex = /^\s*(第[零一二三四五六七八九十百千万0-9]+[章回节卷集部篇].*|序言|序章|前言|后记|引子|楔子|尾声|番外.*)\s*$/;
       let curTitle = '开始阅读';
       let curBuf = [];
-
+      const flush = () => {
+        const content = curBuf.join('\n').trim();
+        if (content.length >= 15) chapters.push({ title: curTitle, content });
+      };
       for (const line of lines) {
-        if (chapRegex.test(line) && line.length < 45) {
-          if (curBuf.join('\n').trim().length > 0) {
-            chapters.push({ title: curTitle, content: curBuf.join('\n').trim() });
-          }
+        if (isChapterTitleLine(line)) {
+          flush();
           curTitle = line.trim();
           curBuf = [];
         } else {
           curBuf.push(line);
         }
       }
-      if (curBuf.join('\n').trim().length > 0) {
-        chapters.push({ title: curTitle, content: curBuf.join('\n').trim() });
-      }
+      flush();
+
       if (chapters.length <= 1 && rawText.length > 3500) {
         const auto = [];
-        for (let i = 0; i < rawText.length; i += 3000) {
-          auto.push({
-            title: `第 ${auto.length + 1} 节`,
-            content: rawText.slice(i, i + 3000)
-          });
+        let buf = [];
+        let len = 0;
+        const pushAuto = () => {
+          const content = buf.join('\n').trim();
+          if (content) auto.push({ title: `第 ${auto.length + 1} 节`, content });
+          buf = [];
+          len = 0;
+        };
+        for (const line of lines) {
+          buf.push(line);
+          len += line.length + 1;
+          if (len >= 3000) pushAuto(); // 按行（段落）边界切分，不再从句中间截断
         }
+        pushAuto();
         return auto;
       }
-      return chapters.length ? chapters : [{ title: bookTitle, content: rawText }];
+      return chapters.length ? chapters : [{ title: bookTitle, content: rawText.trim() }];
     }
 
     function normalizePath(baseDir, relPath) {
-      const clean = decodeURIComponent(relPath.split('#')[0]);
+      let clean = relPath.split('#')[0];
+      try { clean = decodeURIComponent(clean); } catch (e) {}
       const stack = baseDir ? baseDir.split('/').filter(Boolean) : [];
       for (const part of clean.split('/')) {
         if (part === '..') stack.pop();
         else if (part && part !== '.') stack.push(part);
       }
       return stack.join('/');
+    }
+
+    // ---------- EPUB：把章节文件拆成「段落块」，并记录每块内的锚点 id ----------
+    function parseMarkup(str) {
+      const parser = new DOMParser();
+      let doc = parser.parseFromString(str, 'application/xhtml+xml');
+      if (doc.getElementsByTagName('parsererror').length || !doc.body) {
+        doc = parser.parseFromString(str, 'text/html'); // 不规范的 XHTML 降级解析
+      }
+      return doc;
+    }
+
+    const BLOCK_SEL = 'p,h1,h2,h3,h4,h5,h6,li,blockquote,pre,table,div,section,article';
+    const SKIP_TAGS = new Set(['script', 'style', 'nav', 'svg', 'head', 'noscript']);
+
+    function walkBlocks(node, out) {
+      for (const child of Array.from(node.childNodes)) {
+        if (child.nodeType === 3) {
+          const t = child.nodeValue.replace(/\s+/g, ' ').trim();
+          if (t) out.push({ text: t, el: null });
+          continue;
+        }
+        if (child.nodeType !== 1) continue;
+        const tag = (child.localName || '').toLowerCase();
+        if (SKIP_TAGS.has(tag)) continue;
+        const isLeafTag = /^(p|h[1-6])$/.test(tag);
+        if (!isLeafTag && child.querySelector(BLOCK_SEL)) {
+          out.push({ text: '', el: child, shallow: true });
+          walkBlocks(child, out);
+        } else {
+          out.push({ text: child.textContent.replace(/\s+/g, ' ').trim(), el: child });
+        }
+      }
+    }
+
+    function collectIds(item) {
+      const ids = new Set();
+      const el = item.el;
+      if (!el) return ids;
+      const add = e => {
+        const a = e.getAttribute('id');
+        if (a) ids.add(a);
+        const n = e.getAttribute('name');
+        if (n) ids.add(n);
+      };
+      add(el);
+      if (!item.shallow) el.querySelectorAll('[id],[name]').forEach(add);
+      return ids;
     }
 
     async function parseEpubChapters(file) {
@@ -1104,74 +1188,161 @@
         const fullHref = normalizePath(opfDir, href);
         manifest[id] = { href: fullHref, media };
         if (media === 'application/x-dtbncx+xml') ncxHref = fullHref;
-        if (props.includes('nav')) navHref = fullHref;
+        if (props.split(/\s+/).includes('nav')) navHref = fullHref;
       });
+      // EPUB2 的 NCX 可能只在 spine[toc] 中声明
+      if (!ncxHref) {
+        const tocId = opfDoc.querySelector('spine')?.getAttribute('toc');
+        if (tocId && manifest[tocId]) ncxHref = manifest[tocId].href;
+      }
 
-      const tocMap = {};
+      // ---- 1. 读取目录（保留 #锚点，同一文件内的多个章节不再互相覆盖）----
+      const pushToc = (list, dir, label, src) => {
+        if (!label || !src) return;
+        const [p, f] = src.split('#');
+        let frag = '';
+        try { frag = f ? decodeURIComponent(f) : ''; } catch (e) { frag = f || ''; }
+        list.push({
+          label: label.replace(/\s+/g, ' ').trim(),
+          href: p ? normalizePath(dir, p) : '',
+          frag
+        });
+      };
+
+      const tocLists = [];
       if (ncxHref && zip.file(ncxHref)) {
-        const ncxStr = await zip.file(ncxHref).async('string');
-        const ncxDoc = parser.parseFromString(ncxStr, 'application/xml');
+        const ncxDoc = parser.parseFromString(await zip.file(ncxHref).async('string'), 'application/xml');
         const ncxDir = ncxHref.includes('/') ? ncxHref.slice(0, ncxHref.lastIndexOf('/')) : '';
+        const list = [];
         ncxDoc.querySelectorAll('navPoint').forEach(np => {
-          const label = np.querySelector('navLabel > text')?.textContent?.trim();
-          const src = np.querySelector('content')?.getAttribute('src');
-          if (label && src) {
-            const targetPath = normalizePath(ncxDir, src);
-            if (!tocMap[targetPath]) tocMap[targetPath] = label;
-          }
+          pushToc(list, ncxDir,
+            np.querySelector('navLabel > text')?.textContent,
+            np.querySelector('content')?.getAttribute('src'));
         });
+        tocLists.push(list);
       }
-      if (Object.keys(tocMap).length === 0 && navHref && zip.file(navHref)) {
-        const navStr = await zip.file(navHref).async('string');
-        const navDoc = parser.parseFromString(navStr, 'application/xhtml+xml');
+      if (navHref && zip.file(navHref)) {
+        const navDoc = parseMarkup(await zip.file(navHref).async('string'));
         const navDir = navHref.includes('/') ? navHref.slice(0, navHref.lastIndexOf('/')) : '';
-        navDoc.querySelectorAll('nav a').forEach(a => {
-          const label = a.textContent?.trim();
-          const href = a.getAttribute('href');
-          if (label && href) {
-            const targetPath = normalizePath(navDir, href);
-            if (!tocMap[targetPath]) tocMap[targetPath] = label;
-          }
-        });
+        const navs = Array.from(navDoc.querySelectorAll('nav'));
+        // 只取 epub:type="toc"，避免把 landmarks / page-list 当目录
+        const tocNav = navs.find(n => Array.from(n.attributes).some(a => /type$/.test(a.name) && /\btoc\b/.test(a.value))) || navs[0];
+        const list = [];
+        tocNav?.querySelectorAll('a[href]').forEach(a => pushToc(list, navDir, a.textContent, a.getAttribute('href')));
+        tocLists.push(list);
       }
 
-      const chapters = [];
-      const itemrefs = Array.from(opfDoc.querySelectorAll('spine > itemref'));
-      for (const ref of itemrefs) {
+      // ---- 2. 按 spine 顺序拆成段落块 ----
+      const files = [];
+      const fileMap = {};
+      for (const ref of Array.from(opfDoc.querySelectorAll('spine > itemref'))) {
         const item = manifest[ref.getAttribute('idref')];
         if (!item || (!item.media.includes('html') && !item.media.includes('xml'))) continue;
         const zipEntry = zip.file(item.href);
-        if (!zipEntry) continue;
-        const htmlStr = await zipEntry.async('string');
-        const doc = parser.parseFromString(htmlStr, 'application/xhtml+xml');
-        doc.querySelectorAll('script, style, nav').forEach(el => el.remove());
+        if (!zipEntry || fileMap[item.href]) continue;
+        const doc = parseMarkup(await zipEntry.async('string'));
+        const root = doc.body || doc.documentElement;
+        const blocks = [];
+        walkBlocks(root, blocks);
+        blocks.forEach(b => { b.ids = collectIds(b); });
+        const f = { href: item.href, blocks };
+        files.push(f);
+        fileMap[item.href] = f;
+      }
 
-        let chapTitle = tocMap[item.href] || '';
-        if (!chapTitle) {
-          const headings = Array.from(doc.querySelectorAll('h1, h2, h3, h4, .title, .chapter-title'));
-          for (const h of headings) {
-            const t = h.textContent?.replace(/\s+/g, ' ').trim();
-            if (t && t !== bookTitle && t.length <= 45) {
-              chapTitle = t;
-              break;
+      const allBlocks = [];
+      const fileStart = {};
+      for (const f of files) {
+        fileStart[f.href] = allBlocks.length;
+        allBlocks.push(...f.blocks);
+      }
+
+      // ---- 3. 把目录项定位到全书的段落位置 ----
+      const resolveToc = (list) => {
+        const entries = [];
+        for (const t of list) {
+          if (!(t.href in fileStart)) continue;
+          const f = fileMap[t.href];
+          const start = fileStart[t.href];
+          let pos = start;
+          if (t.frag) {
+            for (let i = start; i < start + f.blocks.length; i++) {
+              if (allBlocks[i].ids.has(t.frag)) { pos = i; break; }
             }
           }
+          entries.push({ label: t.label, pos });
         }
-        if (!chapTitle) {
-          const firstLine = Array.from(doc.querySelectorAll('p, div'))
-            .map(p => p.textContent?.replace(/\s+/g, ' ').trim())
-            .find(t => t && t !== bookTitle && t.length > 1 && t.length <= 36);
-          if (firstLine) chapTitle = firstLine;
+        entries.sort((a, b) => a.pos - b.pos);
+        const dedup = [];
+        for (const e of entries) {
+          if (dedup.length && dedup[dedup.length - 1].pos === e.pos) dedup[dedup.length - 1] = e;
+          else dedup.push(e);
         }
+        return dedup;
+      };
 
-        const bodyText = (doc.body?.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
-        if (bodyText.length > 20) {
-          chapters.push({
-            title: chapTitle || `第 ${chapters.length + 1} 部分`,
-            content: bodyText
-          });
+      let entries = [];
+      for (const list of tocLists) {
+        const r = resolveToc(list);
+        if (r.length >= 2) { entries = r; break; }
+        if (r.length > entries.length) entries = r;
+      }
+
+      const buildContent = (label, from, to) => {
+        const texts = [];
+        for (let i = from; i < to; i++) if (allBlocks[i].text) texts.push(allBlocks[i].text);
+        // 去掉正文开头与章节标题重复的标题行（含被拆成两行的情况）
+        if (texts.length && normLabel(texts[0]) === normLabel(label)) texts.shift();
+        else if (texts.length > 1 && normLabel(texts[0] + texts[1]) === normLabel(label)) texts.splice(0, 2);
+        return texts.join('\n');
+      };
+
+      let chapters = [];
+
+      if (entries.length >= 2) {
+        // 目录为准：每个目录项 = 一章；目录外的文件并入前一章
+        if (entries[0].pos > 0) {
+          const firstText = allBlocks.slice(0, entries[0].pos).find(b => b.text)?.text || '';
+          const label = firstText && firstText.length <= 20 ? firstText : '书前内容';
+          const content = buildContent(label, 0, entries[0].pos);
+          if (content.length >= 300) chapters.push({ title: label, content });
+        }
+        entries.forEach((e, i) => {
+          if (SKIP_LABEL_RE.test(e.label)) return;
+          const end = i + 1 < entries.length ? entries[i + 1].pos : allBlocks.length;
+          const content = buildContent(e.label, e.pos, end);
+          if (content.length > 20) chapters.push({ title: e.label, content });
+        });
+      } else {
+        // 没有可用目录：按文件 + 标题启发式识别，无标题的文件并入上一章
+        for (const f of files) {
+          const texts = f.blocks.map(b => b.text).filter(Boolean);
+          if (!texts.length) continue;
+          let title = '';
+          const head = f.blocks.find(b => b.el && /^h[1-3]$/i.test(b.el.localName || '') && b.text && b.text.length <= 45 && normLabel(b.text) !== normLabel(bookTitle));
+          if (head) title = head.text;
+          else if (isChapterTitleLine(texts[0])) title = texts[0];
+          let body = texts;
+          if (title && normLabel(body[0]) === normLabel(title)) body = body.slice(1);
+          const content = body.join('\n');
+          if (title) {
+            if (content.length > 20) chapters.push({ title, content });
+          } else if (chapters.length) {
+            chapters[chapters.length - 1].content += '\n' + content;
+          } else if (content.length > 20) {
+            chapters.push({ title: '开始阅读', content });
+          }
+        }
+        // 整本书只识别出 1~2 章：把全文当 TXT 再按“第X章”等规则识别一次
+        if (chapters.length <= 2) {
+          const all = chapters.map(c => c.content).join('\n');
+          if (all.length > 8000) {
+            const re = splitTxtToChapters(all, bookTitle);
+            if (re.length > chapters.length) chapters = re;
+          }
         }
       }
+
       if (!chapters.length) throw new Error('未能提取到有效章节正文');
       return {
         id: 'book-' + Date.now(),
@@ -1192,7 +1363,7 @@
         if (file.name.toLowerCase().endsWith('.epub')) {
           newBook = await parseEpubChapters(file);
         } else {
-          const text = await file.text();
+          const text = await readTextAuto(file);
           const title = file.name.replace(/\.txt$/i, '');
           newBook = {
             id: 'book-' + Date.now(),
