@@ -1165,7 +1165,16 @@
         if (child.nodeType !== 1) continue;
         const tag = (child.localName || '').toLowerCase();
         if (SKIP_TAGS.has(tag)) continue;
+
+        // 空锚点/带 id 的行内元素：生成占位 block，保证 #frag 可定位
+        const hasId = child.hasAttribute && (child.hasAttribute('id') || child.hasAttribute('name'));
         const isLeafTag = /^(p|h[1-6])$/.test(tag);
+
+        if (hasId && !child.textContent.trim()) {
+          out.push({ text: '', el: child, anchorOnly: true });
+          continue;
+        }
+
         if (!isLeafTag && child.querySelector(BLOCK_SEL)) {
           out.push({ text: '', el: child, shallow: true });
           walkBlocks(child, out);
@@ -1180,13 +1189,13 @@
       const el = item.el;
       if (!el) return ids;
       const add = e => {
-        const a = e.getAttribute('id');
+        const a = e.getAttribute && e.getAttribute('id');
         if (a) ids.add(a);
-        const n = e.getAttribute('name');
+        const n = e.getAttribute && e.getAttribute('name');
         if (n) ids.add(n);
       };
       add(el);
-      if (!item.shallow) el.querySelectorAll('[id],[name]').forEach(add);
+      if (!item.shallow && !item.anchorOnly) el.querySelectorAll('[id],[name]').forEach(add);
       return ids;
     }
 
@@ -1314,7 +1323,7 @@
           if (t.frag) {
             let found = -1;
             for (let i = start; i < start + f.blocks.length; i++) {
-              if (allBlocks[i].ids.has(t.frag)) { found = i; break; }
+              if (allBlocks[i].ids && allBlocks[i].ids.has(t.frag)) { found = i; break; }
             }
             if (found < 0) {
               const nl = normLabel(t.label);
@@ -1330,31 +1339,54 @@
         return entries;
       };
 
+      // ---- 4. 选择“有效章标题数量最多”的目录源 ----
+      const CH_RE = /^\s*(第\s*[零〇一二三四五六七八九十百千万两0-9０-９]+\s*[章回]|chapter\s*[0-9IVXLC]+)/i;
       let entries = [];
+      let bestScore = -1;
       for (const list of tocLists) {
         const r = resolveToc(list);
-        if (r.length >= 2) { entries = r; break; }
-        if (r.length > entries.length) entries = r;
+        const score = r.filter(e => CH_RE.test(e.label)).length * 1000 + r.length;
+        if (score > bestScore) {
+          bestScore = score;
+          entries = r;
+        }
       }
 
-      // ---- 选定“章”所在的层级（仿微信读书：目录里的一级项 = 章，小节不拆章）----
-      // 若某一层大量出现“第X章/Chapter N”，以该层为章（卷 > 章 的书会落在第二层）；否则取最顶层
-      let chapDepth = 0;
+      // ---- 5. 选定“章”所在的层级（过滤前言/目录/版权等非章条目）----
+      const NON_CHAP_RE = /^(封面|cover|目录|contents?|版权|copyright|书名页|titlepage|扉页|前言|序言|序|后记|附录|index|nav|toc)$/i;
+
+      function isRealChapterLabel(label) {
+        const t = String(label || '').replace(/\s+/g, ' ').trim();
+        if (!t) return false;
+        if (NON_CHAP_RE.test(t)) return false;
+        if (CH_RE.test(t)) return true;
+        // 没有“第X章”但像章节标题：长度适中、不以句号结尾
+        return t.length <= 40 && !/[。；;，,]$/.test(t);
+      }
+
       if (entries.length) {
-        const CH_RE = /^\s*(第\s*[零〇一二三四五六七八九十百千万两0-9０-９]+\s*[章回]|chapter\s*[0-9IVXLC]+)/i;
+        // 先统计每一层“真正章标题”的数量
         const cnt = {};
         let minDepth = Infinity;
         for (const e of entries) {
           minDepth = Math.min(minDepth, e.depth);
           if (CH_RE.test(e.label)) cnt[e.depth] = (cnt[e.depth] || 0) + 1;
         }
-        chapDepth = minDepth;
-        let bestCnt = 1;
+
+        let chapDepth = minDepth;
+        let bestCnt = 0;
         for (const d of Object.keys(cnt).map(Number).sort((a, b) => a - b)) {
           if (cnt[d] > bestCnt) { bestCnt = cnt[d]; chapDepth = d; }
         }
-        // 只保留章及更高层级（卷）；同一位置的父级折叠为“所属卷”
-        const kept = entries.filter(e => e.depth <= chapDepth);
+        // 如果没有任何“第X章”，退化为最顶层，但过滤非章条目
+        if (bestCnt === 0) chapDepth = minDepth;
+
+        // 只保留章及更高层级（卷），并过滤非章条目
+        const kept = entries
+          .filter(e => e.depth <= chapDepth)
+          .filter(e => isRealChapterLabel(e.label) || e.depth < chapDepth); // 父级卷保留
+
+        // 同一位置的父级折叠为“所属卷”
         const dedup = [];
         for (const e of kept) {
           const prev = dedup[dedup.length - 1];
@@ -1373,9 +1405,12 @@
           const t = allBlocks[i].text;
           if (t && normLabel(t) !== bt) texts.push(t);
         }
-        // 去掉正文开头与章节标题重复的标题行（含被拆成两行的情况）
-        if (texts.length && normLabel(texts[0]) === normLabel(label)) texts.shift();
-        else if (texts.length > 1 && normLabel(texts[0] + texts[1]) === normLabel(label)) texts.splice(0, 2);
+        // 只在首段与章节标题完全一致时删一次，避免误删“前言”正文
+        if (texts.length && normLabel(texts[0]) === normLabel(label)) {
+          texts.shift();
+        } else if (texts.length > 1 && normLabel(texts[0] + texts[1]) === normLabel(label)) {
+          texts.splice(0, 2);
+        }
         return texts.join('\n');
       };
 
