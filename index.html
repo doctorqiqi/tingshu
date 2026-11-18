@@ -74,9 +74,9 @@
       background: var(--bg);
     }
     .shelf-title { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
-    .header-actions { display: flex; gap: 10px; }
+    .header-actions { display: flex; gap: 8px; align-items: center; }
     .pill-btn {
-      padding: 7px 14px;
+      padding: 7px 12px;
       border-radius: 20px;
       border: none;
       background: var(--card);
@@ -550,7 +550,7 @@
       overflow: hidden;
       animation: slideUp 0.25s ease-out;
     }
-    .drawer-sheet.compact { height: auto; max-height: 70%; }
+    .drawer-sheet.compact { height: auto; max-height: 75%; }
     @keyframes slideUp {
       from { transform: translateY(100%); }
       to { transform: translateY(0); }
@@ -594,7 +594,7 @@
     .drawer-list {
       flex: 1;
       overflow-y: auto;
-      padding: 6px 18px calc(20px + var(--safe-bottom));
+      padding: 12px 18px calc(24px + var(--safe-bottom));
     }
     .list-row {
       padding: 14px 0;
@@ -663,6 +663,11 @@
       cursor: pointer;
       margin-top: 6px;
     }
+    .save-btn.secondary {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
 
     .toast {
       position: fixed;
@@ -688,9 +693,11 @@
       <div class="shelf-header">
         <div class="shelf-title">书架</div>
         <div class="header-actions">
-          <button class="pill-btn" id="btnOpenSettings">⚙️ 云端/语音</button>
-          <button class="pill-btn primary" id="btnImport">＋ 导入书籍</button>
+          <button class="pill-btn" id="btnExportBackup" title="导出全书及进度备份">💾 备份</button>
+          <button class="pill-btn" id="btnOpenSettings">⚙️ 设置</button>
+          <button class="pill-btn primary" id="btnImport">＋ 导入</button>
           <input type="file" id="fileInput" accept=".epub,.txt,text/plain,application/epub+zip" hidden />
+          <input type="file" id="backupFileInput" accept=".json" hidden />
         </div>
       </div>
       <div class="shelf-scroll">
@@ -812,6 +819,8 @@
         author: '[日] 大前研一 著',
         coverBg: COVER_PALETTES[0],
         coverUrl: '',
+        _lastChap: 0,
+        _lastSent: 0,
         chapters: [
           {
             title: '第一章 “低智商社会”的出现',
@@ -859,8 +868,8 @@
       { id: 'zh-TW-YunJheNeural', name: '云哲 · 台湾国语男声' }
     ];
 
-    let books = JSON.parse(localStorage.getItem('weread_books') || 'null') || SAMPLE_BOOKS;
-    let bookmarks = JSON.parse(localStorage.getItem('weread_bookmarks') || '{}');
+    let books = [];
+    let bookmarks = {};
     let edgeConfig = JSON.parse(localStorage.getItem('tingshu_edge_worker_tts') || '{"workerUrl":"","token":"","voice":"zh-CN-YunxiNeural"}');
 
     let currentBook = null;
@@ -894,14 +903,154 @@
       el._t = setTimeout(() => el.classList.remove('show'), 2000);
     }
 
-    function saveAll() {
+    // ==========================================
+    // IndexedDB 数据库层
+    // ==========================================
+    const DB_NAME = 'WeReadTingshuDB';
+    const DB_VERSION = 1;
+    let db = null;
+
+    function initDB() {
+      return new Promise((resolve, reject) => {
+        if (db) return resolve(db);
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          db = request.result;
+          resolve(db);
+        };
+        request.onupgradeneeded = (e) => {
+          const database = e.target.result;
+          if (!database.objectStoreNames.contains('books')) {
+            database.createObjectStore('books', { keyPath: 'id' });
+          }
+          if (!database.objectStoreNames.contains('meta')) {
+            database.createObjectStore('meta', { keyPath: 'key' });
+          }
+        };
+      });
+    }
+
+    async function dbSaveAllBooks() {
       try {
-        localStorage.setItem('weread_books', JSON.stringify(books));
-        localStorage.setItem('weread_bookmarks', JSON.stringify(bookmarks));
+        const database = await initDB();
+        const tx = database.transaction('books', 'readwrite');
+        const store = tx.objectStore('books');
+        await new Promise((res, rej) => {
+          store.clear().onsuccess = () => {
+            let count = books.length;
+            if (count === 0) res();
+            books.forEach(b => {
+              store.put(b).onsuccess = () => {
+                count--;
+                if (count === 0) res();
+              };
+              store.put(b).onerror = (err) => rej(err);
+            });
+          };
+          tx.onerror = (err) => rej(err);
+        });
+
+        const txMeta = database.transaction('meta', 'readwrite');
+        const metaStore = txMeta.objectStore('meta');
+        metaStore.put({ key: 'bookmarks', value: bookmarks });
       } catch (e) {
-        toast('本地存储空间已满');
+        toast('IndexedDB 保存失败: ' + e.message);
       }
     }
+
+    async function dbLoadAll() {
+      try {
+        const database = await initDB();
+        
+        // 加载图书
+        const booksList = await new Promise((res, rej) => {
+          const req = database.transaction('books', 'readonly').objectStore('books').getAll();
+          req.onsuccess = () => res(req.result);
+          req.onerror = () => rej(req.error);
+        });
+
+        // 加载书签
+        const metaBm = await new Promise((res, rej) => {
+          const req = database.transaction('meta', 'readonly').objectStore('meta').get('bookmarks');
+          req.onsuccess = () => res(req.result);
+          req.onerror = () => rej(req.error);
+        });
+
+        if (booksList && booksList.length > 0) {
+          books = booksList;
+        } else {
+          books = SAMPLE_BOOKS;
+          await dbSaveAllBooks();
+        }
+
+        if (metaBm && metaBm.value) {
+          bookmarks = metaBm.value;
+        }
+      } catch (e) {
+        books = SAMPLE_BOOKS;
+      }
+      renderShelf();
+    }
+
+    function saveAll() {
+      dbSaveAllBooks();
+    }
+
+    // ==========================================
+    // 数据备份与恢复功能
+    // ==========================================
+    async function exportBackupData() {
+      const backupObj = {
+        version: 2,
+        date: new Date().toISOString(),
+        books,
+        bookmarks,
+        edgeConfig
+      };
+      const jsonStr = JSON.stringify(backupObj, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `微信读书备份_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('备份文件已成功导出');
+    }
+
+    function importBackupData(file) {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (!data.books || !Array.isArray(data.books)) {
+            throw new Error('备份文件格式不正确');
+          }
+          if (confirm(`确认导入备份？这将覆盖当前书架中的 ${books.length} 本书和进度。`)) {
+            books = data.books;
+            bookmarks = data.bookmarks || {};
+            if (data.edgeConfig) {
+              edgeConfig = data.edgeConfig;
+              localStorage.setItem('tingshu_edge_worker_tts', JSON.stringify(edgeConfig));
+            }
+            await dbSaveAllBooks();
+            renderShelf();
+            toast(`成功恢复 ${books.length} 本书及阅读进度`);
+          }
+        } catch (err) {
+          toast('导入备份失败: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    $('#btnExportBackup').onclick = exportBackupData;
+    $('#backupFileInput').onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) importBackupData(file);
+      e.target.value = '';
+    };
 
     // ==========================================
     // Safari MediaSession 锁屏控制
@@ -958,7 +1107,7 @@
       text = text.replace(/[《》"「」『』“”‘’"'`（）()\[\]【】{}〔〕〈〉]/g, '');
       text = text.replace(/[……⋯]{2,}|…+/g, '，');
       text = text.replace(/[—–―－]{1,}/g, '，');
-      text = text.replace(/[[,、；;：:]{2,}/g, '，');
+      text = text.replace(/[,、；;：:]{2,}/g, '，');
       text = text.replace(/[。！？!?]{2,}/g, '。');
       text = text.replace(/^[\s,。；;：:、！？!?—–-]+/gm, '');
       return text.trim();
@@ -1064,7 +1213,7 @@
     loadVoices();
 
     // ==========================================
-    // 书架与带封面图解析的 EPUB 引擎
+    // 书架渲染
     // ==========================================
     function renderShelf() {
       const grid = $('#bookGrid');
@@ -1086,12 +1235,12 @@
           <div class="card-name">${book.title}</div>
           <div class="card-prog">${prog}</div>
         `;
-        card.querySelector('.del-badge').onclick = (e) => {
+        card.querySelector('.del-badge').onclick = async (e) => {
           e.stopPropagation();
           if (confirm(`确认从书架移除《${book.title}》？`)) {
             books = books.filter(b => b.id !== book.id);
             delete bookmarks[book.id];
-            saveAll();
+            await saveAll();
             renderShelf();
           }
         };
@@ -1251,31 +1400,28 @@
       return ids;
     }
 
-    // 自动提取 EPUB 封面图片的强力函数
-    async function extractEpubCover(zip, opfDoc, opfDir, manifest) {
+    function blobToBase64(blob) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function extractEpubCoverBase64(zip, opfDoc, opfDir, manifest) {
       let coverHref = '';
-      
-      // 1. 检查 <meta name="cover" content="..." />
       const metaCover = opfDoc.querySelector('metadata > meta[name="cover"]');
       if (metaCover) {
         const contentId = metaCover.getAttribute('content');
-        if (contentId && manifest[contentId]) {
-          coverHref = manifest[contentId].href;
-        }
+        if (contentId && manifest[contentId]) coverHref = manifest[contentId].href;
       }
-
-      // 2. 检查性质为 cover-image 的 item
       if (!coverHref) {
         for (const id in manifest) {
           const item = manifest[id];
-          if (item.properties && item.properties.includes('cover-image')) {
-            coverHref = item.href;
-            break;
-          }
+          if (item.properties && item.properties.includes('cover-image')) { coverHref = item.href; break; }
         }
       }
-
-      // 3. 通过 ID 或 href 包含 cover 的关键字查找
       if (!coverHref) {
         for (const id in manifest) {
           const item = manifest[id];
@@ -1285,16 +1431,12 @@
           }
         }
       }
-
-      // 若在 manifest 中找到封面图片，直接从 zip 读取并生成 ObjectURL
       if (coverHref && zip.file(coverHref)) {
         try {
           const blob = await zip.file(coverHref).async('blob');
-          return URL.createObjectURL(blob);
+          return await blobToBase64(blob);
         } catch (e) {}
       }
-
-      // 4. 如果还没找到，检查 spine 的第一个 HTML 页面内是否包含 <img> 封面
       const firstItemref = opfDoc.querySelector('spine > itemref');
       if (firstItemref) {
         const idref = firstItemref.getAttribute('idref');
@@ -1304,21 +1446,17 @@
             const htmlText = await zip.file(firstItem.href).async('string');
             const doc = parseMarkup(htmlText);
             const img = doc.querySelector('img');
-            if (img) {
-              const imgSrc = img.getAttribute('src');
-              if (imgSrc) {
-                const itemDir = firstItem.href.includes('/') ? firstItem.href.slice(0, firstItem.href.lastIndexOf('/')) : '';
-                const fullImgPath = normalizePath(itemDir, imgSrc);
-                if (zip.file(fullImgPath)) {
-                  const blob = await zip.file(fullImgPath).async('blob');
-                  return URL.createObjectURL(blob);
-                }
+            if (img && img.getAttribute('src')) {
+              const itemDir = firstItem.href.includes('/') ? firstItem.href.slice(0, firstItem.href.lastIndexOf('/')) : '';
+              const fullImgPath = normalizePath(itemDir, img.getAttribute('src'));
+              if (zip.file(fullImgPath)) {
+                const blob = await zip.file(fullImgPath).async('blob');
+                return await blobToBase64(blob);
               }
             }
           } catch (e) {}
         }
       }
-
       return '';
     }
 
@@ -1352,20 +1490,14 @@
         if (tocId && manifest[tocId]) ncxHref = manifest[tocId].href;
       }
 
-      // 提取封面图片
-      const coverUrl = await extractEpubCover(zip, opfDoc, opfDir, manifest);
+      const coverUrl = await extractEpubCoverBase64(zip, opfDoc, opfDir, manifest);
 
       const pushToc = (list, dir, label, src, depth = 0) => {
         if (!label || !src) return;
         const [p, f] = src.split('#');
         let frag = '';
         try { frag = f ? decodeURIComponent(f) : ''; } catch (e) { frag = f || ''; }
-        list.push({
-          label: label.replace(/\s+/g, ' ').trim(),
-          href: p ? normalizePath(dir, p) : '',
-          frag,
-          depth
-        });
+        list.push({ label: label.replace(/\s+/g, ' ').trim(), href: p ? normalizePath(dir, p) : '', frag, depth });
       };
 
       const tocLists = [];
@@ -1376,9 +1508,7 @@
         const kids = (el, name) => Array.from(el.children).filter(c => c.localName === name);
         const walkNav = (parent, depth) => {
           for (const np of kids(parent, 'navPoint')) {
-            const label = kids(np, 'navLabel')[0]?.textContent;
-            const src = kids(np, 'content')[0]?.getAttribute('src');
-            pushToc(list, ncxDir, label, src, depth);
+            pushToc(list, ncxDir, kids(np, 'navLabel')[0]?.textContent, kids(np, 'content')[0]?.getAttribute('src'), depth);
             walkNav(np, depth + 1);
           }
         };
@@ -1418,9 +1548,8 @@
         if (!zipEntry || fileMap[item.href]) continue;
         if (guideTocHref && item.href === guideTocHref && !tocHrefSet.has(item.href)) continue;
         const doc = parseMarkup(await zipEntry.async('string'));
-        const root = doc.body || doc.documentElement;
         const blocks = [];
-        walkBlocks(root, blocks);
+        walkBlocks(doc.body || doc.documentElement, blocks);
         blocks.forEach(b => { b.ids = collectIds(b); });
         const f = { href: item.href, blocks };
         files.push(f);
@@ -1479,31 +1608,22 @@
           if (t && normLabel(t) !== bt) texts.push(t);
         }
         if (texts.length && normLabel(texts[0]) === normLabel(label)) texts.shift();
-        else if (texts.length > 1 && normLabel(texts[0] + texts[1]) === normLabel(label)) texts.splice(0, 2);
         return texts.join('\n');
       };
 
       if (entries.length >= 2) {
         if (entries[0].pos > 0) {
-          const label = '书前内容';
-          const content = buildContent(label, 0, entries[0].pos);
-          if (content.length >= 300) chapters.push({ title: label, content, level: 0, group: '' });
+          const content = buildContent('书前内容', 0, entries[0].pos);
+          if (content.length >= 300) chapters.push({ title: '书前内容', content, level: 0, group: '' });
         }
         entries.forEach((e, i) => {
           if (SKIP_LABEL_RE.test(e.label)) return;
           const level = Math.max(0, e.depth - minDepth);
-          if (level === 0) {
-            currentParentTitle = e.label;
-          }
+          if (level === 0) currentParentTitle = e.label;
           const end = i + 1 < entries.length ? entries[i + 1].pos : allBlocks.length;
           const content = buildContent(e.label, e.pos, end);
           if (content.length > 20 || level === 0) {
-            chapters.push({
-              title: e.label,
-              content: content || '（本节内容较少）',
-              level: Math.min(level, 2),
-              group: level > 0 ? currentParentTitle : ''
-            });
+            chapters.push({ title: e.label, content: content || '（本节内容较少）', level: Math.min(level, 2), group: level > 0 ? currentParentTitle : '' });
           }
         });
       } else {
@@ -1511,26 +1631,15 @@
           const texts = f.blocks.map(b => b.text).filter(Boolean);
           if (!texts.length) continue;
           let title = '';
-          const head = f.blocks.find(b => b.el && /^h[1-3]$/i.test(b.el.localName || '') && b.text && b.text.length <= 45 && normLabel(b.text) !== normLabel(bookTitle));
+          const head = f.blocks.find(b => b.el && /^h[1-3]$/i.test(b.el.localName || '') && b.text && b.text.length <= 45);
           if (head) title = head.text;
           else if (isChapterTitleLine(texts[0])) title = texts[0];
           let body = texts;
           if (title && normLabel(body[0]) === normLabel(title)) body = body.slice(1);
           const content = body.join('\n');
-          if (title) {
-            if (content.length > 20) chapters.push({ title, content, level: 0, group: '' });
-          } else if (chapters.length) {
-            chapters[chapters.length - 1].content += '\n' + content;
-          } else if (content.length > 20) {
-            chapters.push({ title: '开始阅读', content, level: 0, group: '' });
-          }
-        }
-        if (chapters.length <= 2) {
-          const all = chapters.map(c => c.content).join('\n');
-          if (all.length > 8000) {
-            const re = splitTxtToChapters(all, bookTitle);
-            if (re.length > chapters.length) chapters = re;
-          }
+          if (title && content.length > 20) chapters.push({ title, content, level: 0, group: '' });
+          else if (chapters.length) chapters[chapters.length - 1].content += '\n' + content;
+          else if (content.length > 20) chapters.push({ title: '开始阅读', content, level: 0, group: '' });
         }
       }
 
@@ -1541,7 +1650,9 @@
         author,
         coverBg: COVER_PALETTES[books.length % COVER_PALETTES.length],
         coverUrl,
-        chapters
+        chapters,
+        _lastChap: 0,
+        _lastSent: 0
       };
     }
 
@@ -1563,11 +1674,13 @@
             author: '本地导入',
             coverBg: COVER_PALETTES[books.length % COVER_PALETTES.length],
             coverUrl: '',
-            chapters: splitTxtToChapters(text.slice(0, 600000), title)
+            chapters: splitTxtToChapters(text.slice(0, 600000), title),
+            _lastChap: 0,
+            _lastSent: 0
           };
         }
         books.unshift(newBook);
-        saveAll();
+        await saveAll();
         renderShelf();
         toast(`导入成功，共解析 ${newBook.chapters.length} 个章节和小节`);
       } catch (err) {
@@ -1640,7 +1753,6 @@
       updatePlayerSubtitle();
 
       setupMediaSession();
-
       if (autoPlay) playCurrent();
     }
 
@@ -1684,11 +1796,7 @@
 
     function resetCloudCache() {
       for (const [, entry] of cloudCache) {
-        if (entry.objUrl) {
-          URL.revokeObjectURL(entry.objUrl);
-        } else if (entry.promise) {
-          entry.promise.then(url => URL.revokeObjectURL(url)).catch(() => {});
-        }
+        if (entry.objUrl) URL.revokeObjectURL(entry.objUrl);
       }
       cloudCache.clear();
     }
@@ -1696,11 +1804,7 @@
     function cleanupPlayedAudio() {
       for (const [key, entry] of cloudCache) {
         if (entry.chapIdx !== currentChapIdx || entry.sentIdx < currentSentIdx - 1) {
-          if (entry.objUrl) {
-            URL.revokeObjectURL(entry.objUrl);
-          } else if (entry.promise) {
-            entry.promise.then(url => URL.revokeObjectURL(url)).catch(() => {});
-          }
+          if (entry.objUrl) URL.revokeObjectURL(entry.objUrl);
           cloudCache.delete(key);
         }
       }
@@ -1717,17 +1821,8 @@
       const entry = { chapIdx, sentIdx, objUrl: null, promise: null };
       entry.promise = fetch(`${edgeConfig.workerUrl.replace(/\/$/, '')}/v1/audio/speech`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${edgeConfig.token}`
-        },
-        body: JSON.stringify({
-          model: 'tts-1',
-          input: text,
-          voice: edgeConfig.voice || 'zh-CN-YunxiNeural',
-          speed: rate,
-          response_format: 'mp3'
-        })
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${edgeConfig.token}` },
+        body: JSON.stringify({ model: 'tts-1', input: text, voice: edgeConfig.voice || 'zh-CN-YunxiNeural', speed: rate, response_format: 'mp3' })
       })
         .then(res => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1751,9 +1846,7 @@
       if (engine !== 'cloud' || !edgeConfig.workerUrl || !edgeConfig.token) return;
       for (let offset = 1; offset <= PREFETCH_AHEAD; offset++) {
         const targetIdx = currentSentIdx + offset;
-        if (targetIdx < currentSentences.length) {
-          fetchSentenceAudio(currentChapIdx, targetIdx).catch(() => {});
-        }
+        if (targetIdx < currentSentences.length) fetchSentenceAudio(currentChapIdx, targetIdx).catch(() => {});
       }
     }
 
@@ -1800,11 +1893,8 @@
       updateMediaSessionState();
 
       const text = currentSentences[currentSentIdx];
-      if (engine === 'cloud') {
-        await playCloudSentence(text);
-      } else {
-        playLocalSentence(text);
-      }
+      if (engine === 'cloud') await playCloudSentence(text);
+      else playLocalSentence(text);
     }
 
     function playLocalSentence(text) {
@@ -1816,10 +1906,7 @@
       if (selectedVoice) u.voice = selectedVoice;
       u.onend = () => {
         stopKeepAlive();
-        if (isPlaying) {
-          currentSentIdx++;
-          playCurrent();
-        }
+        if (isPlaying) { currentSentIdx++; playCurrent(); }
       };
       u.onerror = () => stopKeepAlive();
       speechSynthesis.speak(u);
@@ -1846,10 +1933,7 @@
 
         cloudAudio.src = objUrl;
         cloudAudio.onended = () => {
-          if (isPlaying && reqId === cloudReqId) {
-            currentSentIdx++;
-            playCurrent();
-          }
+          if (isPlaying && reqId === cloudReqId) { currentSentIdx++; playCurrent(); }
         };
         await cloudAudio.play();
       } catch (err) {
@@ -1870,7 +1954,7 @@
       $('#pillEngineLocal').classList.toggle('active', mode === 'local');
       $('#pillEngineCloud').classList.toggle('active', mode === 'cloud');
       const found = ALL_EDGE_VOICES.find(v => v.id === edgeConfig.voice);
-      const shortName = found ? found.name.split('·')[0].trim() : (edgeConfig.voice ? edgeConfig.voice.split('-').pop().replace('Neural', '') : '云端音色');
+      const shortName = found ? found.name.split('·')[0].trim() : '云端音色';
       $('#labelVoice').textContent = mode === 'cloud' ? shortName : (selectedVoice ? selectedVoice.name.slice(0, 6) : '系统音色');
     }
 
@@ -1888,10 +1972,7 @@
 
     function applySleepSetting(mode, minutes = 0) {
       clearSleepTimer();
-      if (mode === 'off') {
-        toast('已关闭定时');
-        return;
-      }
+      if (mode === 'off') { toast('已关闭定时'); return; }
       if (mode === 'chapter') {
         sleepMode = 'chapter';
         $('#labelSleep').textContent = '播完本章';
@@ -1911,9 +1992,7 @@
           toast('定时时间到，已停止播放');
           return;
         }
-        const m = Math.floor(left / 60);
-        const s = left % 60;
-        $('#labelSleep').textContent = `${m}:${String(s).padStart(2, '0')}`;
+        $('#labelSleep').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
       };
       tick();
       sleepIntervalId = setInterval(tick, 1000);
@@ -1987,17 +2066,11 @@
           </div>
         `;
         box.querySelectorAll('.sleep-chip').forEach(chip => {
-          chip.onclick = () => {
-            applySleepSetting(chip.dataset.smode, chip.dataset.min);
-            $('#drawerMask').classList.remove('show');
-          };
+          chip.onclick = () => { applySleepSetting(chip.dataset.smode, chip.dataset.min); $('#drawerMask').classList.remove('show'); };
         });
         $('#btnConfirmCustomSleep').onclick = () => {
           const val = parseInt($('#customSleepInput').value, 10);
-          if (!val || val < 1) {
-            toast('请输入有效的分钟数');
-            return;
-          }
+          if (!val || val < 1) { toast('请输入有效的分钟数'); return; }
           applySleepSetting('min', val);
           $('#drawerMask').classList.remove('show');
         };
@@ -2006,7 +2079,12 @@
 
       if (activeDrawerTab === 'settings') {
         box.innerHTML = `
-          <h3 style="margin:10px 0 14px;font-size:17px;">云端 Edge TTS 与语音设置</h3>
+          <h3 style="margin:6px 0 10px;font-size:16px;">数据与备份管理</h3>
+          <div style="display:flex;gap:10px;margin-bottom:16px;">
+            <button class="save-btn secondary" id="btnDrawerExport">导出备份 (.json)</button>
+            <button class="save-btn secondary" id="btnDrawerImport">恢复备份</button>
+          </div>
+          <h3 style="margin:10px 0 12px;font-size:16px;">云端 Edge TTS 与语音设置</h3>
           <div class="form-group">
             <label>Cloudflare Worker 地址</label>
             <input class="form-input" id="cfgUrl" value="${edgeConfig.workerUrl || ''}" placeholder="https://xxx.workers.dev" />
@@ -2016,7 +2094,7 @@
             <input class="form-input" id="cfgToken" type="password" value="${edgeConfig.token || ''}" placeholder="填写环境变量 API_KEY" />
           </div>
           <div class="form-group">
-            <label>云端神经网络音色（内置全部 20+ 款热门音色）</label>
+            <label>云端神经网络音色</label>
             <select class="form-select" id="cfgVoice"></select>
           </div>
           <button class="save-btn" id="btnSaveCfg">保存云端配置并启用</button>
@@ -2028,11 +2106,12 @@
           const opt = document.createElement('option');
           opt.value = v.id;
           opt.textContent = v.name;
-          if (v.id === (edgeConfig.voice || 'zh-CN-YunxiNeural')) {
-            opt.selected = true;
-          }
+          if (v.id === (edgeConfig.voice || 'zh-CN-YunxiNeural')) opt.selected = true;
           sel.appendChild(opt);
         });
+
+        $('#btnDrawerExport').onclick = exportBackupData;
+        $('#btnDrawerImport').onclick = () => $('#backupFileInput').click();
 
         $('#btnSaveCfg').onclick = () => {
           const oldVoice = edgeConfig.voice;
@@ -2042,9 +2121,7 @@
             voice: $('#cfgVoice').value
           };
           localStorage.setItem('tingshu_edge_worker_tts', JSON.stringify(edgeConfig));
-          if (oldVoice !== edgeConfig.voice) {
-            resetCloudCache();
-          }
+          if (oldVoice !== edgeConfig.voice) resetCloudCache();
           setEngine(edgeConfig.workerUrl && edgeConfig.token ? 'cloud' : 'local');
           $('#drawerMask').classList.remove('show');
           toast('云端语音设置已保存');
@@ -2068,10 +2145,7 @@
             </div>
             <span style="font-size:12px;color:var(--text3)">${idx === currentChapIdx ? '当前' : ''}</span>
           `;
-          row.onclick = () => {
-            $('#drawerMask').classList.remove('show');
-            loadChapter(idx, 0, isPlaying);
-          };
+          row.onclick = () => { $('#drawerMask').classList.remove('show'); loadChapter(idx, 0, isPlaying); };
           box.appendChild(row);
         });
       } else if (activeDrawerTab === 'bookmarks') {
@@ -2097,10 +2171,7 @@
             saveAll();
             renderDrawerBody();
           };
-          row.onclick = () => {
-            $('#drawerMask').classList.remove('show');
-            loadChapter(bm.chapIdx, bm.sentIdx, isPlaying);
-          };
+          row.onclick = () => { $('#drawerMask').classList.remove('show'); loadChapter(bm.chapIdx, bm.sentIdx, isPlaying); };
           box.appendChild(row);
         });
       }
@@ -2110,10 +2181,7 @@
     // 事件绑定
     // ==========================================
     $('#btnBackShelf').onclick = () => { renderShelf(); switchView('shelfView'); };
-    $('#fabListen').onclick = () => {
-      switchView('playerView');
-      if (!isPlaying) playCurrent();
-    };
+    $('#fabListen').onclick = () => { switchView('playerView'); if (!isPlaying) playCurrent(); };
     $('#btnBackReader').onclick = () => switchView('readerView');
     $('#btnGoText').onclick = () => switchView('readerView');
 
@@ -2175,7 +2243,12 @@
     $('#drawerSearch').oninput = renderDrawerBody;
 
     setEngine(edgeConfig.workerUrl && edgeConfig.token ? 'cloud' : 'local');
-    renderShelf();
+    
+    // 启动时初始化数据库并加载数据
+    initDB().then(dbLoadAll).catch(() => {
+      books = SAMPLE_BOOKS;
+      renderShelf();
+    });
   </script>
 </body>
 </html>
