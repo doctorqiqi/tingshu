@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -121,8 +120,10 @@
       color: #fff;
       position: relative;
       overflow: hidden;
+      background-size: cover !important;
+      background-position: center !important;
     }
-    .book-cover::before {
+    .book-cover.fallback::before {
       content: "";
       position: absolute;
       left: 0; top: 0; bottom: 0; width: 6px;
@@ -136,15 +137,17 @@
       -webkit-line-clamp: 3;
       -webkit-box-orient: vertical;
       overflow: hidden;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
     }
+    .book-cover:not(.fallback) .cover-title { display: none; }
     .cover-badge {
       align-self: flex-start;
       font-size: 10px;
       padding: 1px 5px;
       border-radius: 3px;
-      background: rgba(0,0,0,0.28);
+      background: rgba(0,0,0,0.4);
     }
+    .book-cover:not(.fallback) .cover-badge { display: none; }
     .del-badge {
       position: absolute;
       top: 4px; right: 4px;
@@ -343,7 +346,20 @@
       padding: 16px 14px;
       color: #fff;
       position: relative;
+      background-size: cover !important;
+      background-position: center !important;
     }
+    .player-art-box.fallback::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(0,0,0,0.2), rgba(0,0,0,0.5));
+      border-radius: 8px;
+      z-index: 1;
+    }
+    .player-art-title, .player-art-author { position: relative; z-index: 2; }
+    .player-art-box:not(.fallback) .player-art-title,
+    .player-art-box:not(.fallback) .player-art-author { display: none; }
     .player-art-title { font-size: 18px; font-weight: 700; line-height: 1.35; }
     .player-art-author { font-size: 12px; opacity: 0.85; }
 
@@ -713,7 +729,7 @@
       </div>
 
       <div class="player-main">
-        <div class="player-art-box" id="playerCoverBox">
+        <div class="player-art-box fallback" id="playerCoverBox">
           <div class="player-art-title" id="playerBookTitle">书名</div>
           <div class="player-art-author" id="playerBookAuthor">作者</div>
         </div>
@@ -795,6 +811,7 @@
         title: '低智商社会（节选）',
         author: '[日] 大前研一 著',
         coverBg: COVER_PALETTES[0],
+        coverUrl: '',
         chapters: [
           {
             title: '第一章 “低智商社会”的出现',
@@ -897,7 +914,7 @@
           artist: currentBook.author || '听书',
           album: currentBook.title,
           artwork: [
-            { src: 'https://via.placeholder.com/512x512/1b88ee/ffffff?text=WeRead', sizes: '512x512', type: 'image/png' }
+            { src: currentBook.coverUrl || 'https://via.placeholder.com/512x512/1b88ee/ffffff?text=WeRead', sizes: '512x512', type: 'image/png' }
           ]
         });
 
@@ -925,7 +942,7 @@
     }
 
     // ==========================================
-    // 文本清洗与智能断句（仅在句末标点断句，>90字合并为约60字片段）
+    // 文本清洗与智能断句
     // ==========================================
     function cleanTextForTTS(input) {
       let text = String(input || '').replace(/\r\n?/g, '\n');
@@ -938,18 +955,17 @@
       text = text.replace(/^\s*>+\s?/gm, '');
       text = text.replace(/\|/g, '，');
       text = text.replace(/\*\*|__|~~|\*|_/g, '');
-      text = text.replace(/[《》「」『』“”‘’"'`（）()\[\]【】{}〔〕〈〉]/g, '');
+      text = text.replace(/[《》"「」『』“”‘’"'`（）()\[\]【】{}〔〕〈〉]/g, '');
       text = text.replace(/[……⋯]{2,}|…+/g, '，');
       text = text.replace(/[—–―－]{1,}/g, '，');
-      text = text.replace(/[，,、；;：:]{2,}/g, '，');
+      text = text.replace(/[[,、；;：:]{2,}/g, '，');
       text = text.replace(/[。！？!?]{2,}/g, '。');
-      text = text.replace(/^[\s，,。；;：:、！？!?—–-]+/gm, '');
+      text = text.replace(/^[\s,。；;：:、！？!?—–-]+/gm, '');
       return text.trim();
     }
 
     function splitSentences(input) {
       const cleaned = cleanTextForTTS(input);
-      // 1. 只在句号、问号、感叹号、分号及换行处断句，保留完整语义
       const rawSentences = cleaned
         .replace(/([。！？!?；;]+)\s*/g, '$1\n')
         .split(/\n+/)
@@ -966,9 +982,8 @@
           continue;
         }
 
-        // 2. 超过 90 字的长句，按逗号、顿号、冒号切分后再合并成约 60 字的片段
         const clauses = sentence
-          .replace(/([，,、：:]+)\s*/g, '$1\n')
+          .replace(/([,、：:]+)\s*/g, '$1\n')
           .split(/\n+/)
           .map(c => c.trim())
           .filter(Boolean);
@@ -976,7 +991,6 @@
         let buffer = '';
         for (const clause of clauses) {
           if (clause.length > MAX_SENTENCE_LEN) {
-            // 极端无标点超长句按 60 字硬切
             if (buffer) {
               result.push(buffer);
               buffer = '';
@@ -1050,7 +1064,7 @@
     loadVoices();
 
     // ==========================================
-    // 书架与目录解析（支持章下属节）
+    // 书架与带封面图解析的 EPUB 引擎
     // ==========================================
     function renderShelf() {
       const grid = $('#bookGrid');
@@ -1059,8 +1073,12 @@
         const card = document.createElement('div');
         card.className = 'book-card';
         const prog = book._lastChap ? `读至第 ${book._lastChap + 1} 章` : `共 ${book.chapters.length} 章`;
+        
+        const coverStyle = book.coverUrl ? `background: url('${book.coverUrl}')` : `background: ${book.coverBg}`;
+        const coverClass = book.coverUrl ? 'book-cover' : 'book-cover fallback';
+
         card.innerHTML = `
-          <div class="book-cover" style="background:${book.coverBg}">
+          <div class="${coverClass}" style="${coverStyle}">
             <div class="cover-title">${book.title}</div>
             <div class="cover-badge">${book.chapters.length}章</div>
             <button class="del-badge" title="删除">✕</button>
@@ -1233,6 +1251,77 @@
       return ids;
     }
 
+    // 自动提取 EPUB 封面图片的强力函数
+    async function extractEpubCover(zip, opfDoc, opfDir, manifest) {
+      let coverHref = '';
+      
+      // 1. 检查 <meta name="cover" content="..." />
+      const metaCover = opfDoc.querySelector('metadata > meta[name="cover"]');
+      if (metaCover) {
+        const contentId = metaCover.getAttribute('content');
+        if (contentId && manifest[contentId]) {
+          coverHref = manifest[contentId].href;
+        }
+      }
+
+      // 2. 检查性质为 cover-image 的 item
+      if (!coverHref) {
+        for (const id in manifest) {
+          const item = manifest[id];
+          if (item.properties && item.properties.includes('cover-image')) {
+            coverHref = item.href;
+            break;
+          }
+        }
+      }
+
+      // 3. 通过 ID 或 href 包含 cover 的关键字查找
+      if (!coverHref) {
+        for (const id in manifest) {
+          const item = manifest[id];
+          if ((id.toLowerCase().includes('cover') || item.href.toLowerCase().includes('cover')) && item.media.startsWith('image/')) {
+            coverHref = item.href;
+            break;
+          }
+        }
+      }
+
+      // 若在 manifest 中找到封面图片，直接从 zip 读取并生成 ObjectURL
+      if (coverHref && zip.file(coverHref)) {
+        try {
+          const blob = await zip.file(coverHref).async('blob');
+          return URL.createObjectURL(blob);
+        } catch (e) {}
+      }
+
+      // 4. 如果还没找到，检查 spine 的第一个 HTML 页面内是否包含 <img> 封面
+      const firstItemref = opfDoc.querySelector('spine > itemref');
+      if (firstItemref) {
+        const idref = firstItemref.getAttribute('idref');
+        const firstItem = manifest[idref];
+        if (firstItem && zip.file(firstItem.href)) {
+          try {
+            const htmlText = await zip.file(firstItem.href).async('string');
+            const doc = parseMarkup(htmlText);
+            const img = doc.querySelector('img');
+            if (img) {
+              const imgSrc = img.getAttribute('src');
+              if (imgSrc) {
+                const itemDir = firstItem.href.includes('/') ? firstItem.href.slice(0, firstItem.href.lastIndexOf('/')) : '';
+                const fullImgPath = normalizePath(itemDir, imgSrc);
+                if (zip.file(fullImgPath)) {
+                  const blob = await zip.file(fullImgPath).async('blob');
+                  return URL.createObjectURL(blob);
+                }
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      return '';
+    }
+
     async function parseEpubChapters(file) {
       const zip = await JSZip.loadAsync(file);
       const containerXml = await zip.file('META-INF/container.xml')?.async('string');
@@ -1254,7 +1343,7 @@
         const media = it.getAttribute('media-type') || '';
         const props = it.getAttribute('properties') || '';
         const fullHref = normalizePath(opfDir, href);
-        manifest[id] = { href: fullHref, media };
+        manifest[id] = { href: fullHref, media, properties: props };
         if (media === 'application/x-dtbncx+xml') ncxHref = fullHref;
         if (props.split(/\s+/).includes('nav')) navHref = fullHref;
       });
@@ -1262,6 +1351,9 @@
         const tocId = opfDoc.querySelector('spine')?.getAttribute('toc');
         if (tocId && manifest[tocId]) ncxHref = manifest[tocId].href;
       }
+
+      // 提取封面图片
+      const coverUrl = await extractEpubCover(zip, opfDoc, opfDir, manifest);
 
       const pushToc = (list, dir, label, src, depth = 0) => {
         if (!label || !src) return;
@@ -1448,6 +1540,7 @@
         title: bookTitle,
         author,
         coverBg: COVER_PALETTES[books.length % COVER_PALETTES.length],
+        coverUrl,
         chapters
       };
     }
@@ -1456,7 +1549,7 @@
     $('#fileInput').onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      toast('正在解析书籍目录与小节...');
+      toast('正在解析书籍封面与目录...');
       try {
         let newBook;
         if (file.name.toLowerCase().endsWith('.epub')) {
@@ -1469,6 +1562,7 @@
             title,
             author: '本地导入',
             coverBg: COVER_PALETTES[books.length % COVER_PALETTES.length],
+            coverUrl: '',
             chapters: splitTxtToChapters(text.slice(0, 600000), title)
           };
         }
@@ -1501,7 +1595,6 @@
 
     function loadChapter(chapIdx, sentIdx = 0, autoPlay = false) {
       if (!currentBook) return;
-      // 切换章节时彻底清理缓存
       resetCloudCache();
       currentChapIdx = Math.max(0, Math.min(chapIdx, currentBook.chapters.length - 1));
       const chap = currentBook.chapters[currentChapIdx];
@@ -1531,7 +1624,15 @@
       });
       bodyEl.appendChild(para);
 
-      $('#playerCoverBox').style.background = currentBook.coverBg;
+      const coverBox = $('#playerCoverBox');
+      if (currentBook.coverUrl) {
+        coverBox.style.background = `url('${currentBook.coverUrl}')`;
+        coverBox.classList.remove('fallback');
+      } else {
+        coverBox.style.background = currentBook.coverBg;
+        coverBox.classList.add('fallback');
+      }
+
       $('#playerBookTitle').textContent = currentBook.title;
       $('#playerBookAuthor').textContent = currentBook.author || '本地电子书';
       $('#playerChapTitle').textContent = chap.title;
@@ -1572,7 +1673,7 @@
     }
 
     // ==========================================
-    // 云端预合成缓存池（提前 3 句请求 + 自动释放内存）
+    // 云端预合成缓存池
     // ==========================================
     const cloudCache = new Map();
     const PREFETCH_AHEAD = 3;
@@ -1594,7 +1695,6 @@
 
     function cleanupPlayedAudio() {
       for (const [key, entry] of cloudCache) {
-        // 清理非当前章或已播过的旧句子（保留当前句和前1句防回退）
         if (entry.chapIdx !== currentChapIdx || entry.sentIdx < currentSentIdx - 1) {
           if (entry.objUrl) {
             URL.revokeObjectURL(entry.objUrl);
@@ -1737,13 +1837,8 @@
       }
 
       try {
-        // 1. 立即清理已播过的旧音频内存
         cleanupPlayedAudio();
-
-        // 2. 获取当前句音频（若已预加载则零等待直接命中缓存）
         const currentAudioPromise = fetchSentenceAudio(currentChapIdx, currentSentIdx);
-
-        // 3. 后台并发预请求后面 3 句的音频
         triggerPrefetch();
 
         const objUrl = await currentAudioPromise;
@@ -1947,7 +2042,6 @@
             voice: $('#cfgVoice').value
           };
           localStorage.setItem('tingshu_edge_worker_tts', JSON.stringify(edgeConfig));
-          // 切换音色时重置缓存
           if (oldVoice !== edgeConfig.voice) {
             resetCloudCache();
           }
@@ -2045,7 +2139,6 @@
       const rates = [1.0, 1.2, 1.5, 1.8, 2.0, 0.8];
       rate = rates[(rates.indexOf(rate) + 1) % rates.length];
       $('#labelRate').textContent = `语速 ${rate.toFixed(1)}x`;
-      // 切换语速时重置预加载缓存
       resetCloudCache();
       if (isPlaying) playCurrent();
     };
@@ -2086,4 +2179,3 @@
   </script>
 </body>
 </html>
-
